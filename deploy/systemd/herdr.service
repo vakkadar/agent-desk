@@ -1,0 +1,12 @@
+[Unit]
+Description=herdr headless server (agent sessions)
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/herdr server
+ExecStop=%h/.local/bin/herdr server stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

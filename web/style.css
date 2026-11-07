@@ -133,3 +133,13 @@ form#prompt textarea { resize: vertical; min-height: 44px; max-height: 40dvh; }
   #cards { padding: 16px; }
   form#prompt { padding: 10px 16px 12px; }
 }
+
+/* Health panel (RH-7) */
+#health { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); width: min(480px, calc(100vw - 32px)); padding: 14px 16px; }
+#health::backdrop { background: rgba(0, 0, 0, 0.4); }
+#health .hhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.hrow { display: flex; gap: 10px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); }
+.hname { width: 110px; flex: none; color: var(--mute); }
+.hdet { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.hdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--mute); }
+.hdot.ok { background: var(--ok); } .hdot.warn { background: #d99a1c; } .hdot.fail { background: var(--warn); }

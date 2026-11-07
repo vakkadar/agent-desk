@@ -11,6 +11,7 @@ import { CfAccess, viaTunnel } from "./net/cfaccess.js";
 import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
+import { collectHealth, registerBuiltinHealth } from "./health.js";
 import type { Mode, Role } from "./types.js";
 
 const cfg = await loadConfig();
@@ -25,6 +26,7 @@ async function admitted(req: IncomingMessage): Promise<boolean> {
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const agent = new ClaudeAgent({ permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
+registerBuiltinHealth(cfg.dataDir);
 await bus.init();
 await store.load();
 
@@ -38,7 +40,7 @@ const http = createServer(async (req, res) => {
   }
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, uptime: process.uptime(), sources: store.list().length }));
+    res.end(JSON.stringify({ ok: true, uptime: process.uptime(), sources: store.list().length, checks: await collectHealth() }));
     return;
   }
   const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
