@@ -12,6 +12,8 @@ import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
 import { collectHealth, registerBuiltinHealth, registerHealth } from "./health.js";
+import { createMux, muxStatus } from "./adapters/mux/index.js";
+import { recoverInto } from "./adapters/mux/recover.js";
 import type { Mode, Role } from "./types.js";
 import { aggregateUsage, readJournal } from "./usage.js";
 import { searchEvents } from "./search.js";
@@ -29,10 +31,24 @@ async function admitted(req: IncomingMessage): Promise<boolean> {
 }
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
-const agent = new ClaudeAgent({ permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
+const mux = await createMux(cfg);
+const agent = new ClaudeAgent({ spawnFn: mux.spawn, permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
 registerBuiltinHealth(cfg.dataDir);
+registerHealth("mux", async () => {
+  const s = await muxStatus();
+  return { level: s.ok ? "ok" : "warn", detail: s.detail };
+});
 await bus.init();
 await store.load();
+await recoverInto(
+  mux,
+  cfg.dataDir,
+  (sid) => {
+    for (const rec of store.list())
+      for (const th of Object.values(rec.threads)) if (th.session.sessionId === sid) return { sourceId: rec.id, threadId: th.id };
+  },
+  (w, event) => bus.publish({ ...w, event }),
+);
 
 // Notes + desk data repo git (FR-8, FR-19)
 const notes = new NotesRecorder(cfg.dataDir, cfg.agent);
