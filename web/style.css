@@ -256,3 +256,13 @@ table.grid tr.mute td { color: var(--mute); }
 .card details.steps > summary { cursor: pointer; padding: 5px 10px; color: var(--mute); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card details.steps > details { margin: 4px 8px; }
 #promptErr { white-space: pre-line; }
+form#prompt { position: relative; }
+#actBtn { align-self: flex-end; }
+#actMenu { position: absolute; right: 24px; top: calc(100% - 6px); z-index: 5; display: flex; flex-direction: column; min-width: 300px; max-width: calc(100vw - 32px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px; }
+#actMenu[hidden] { display: none; }
+#actMenu button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+#actMenu button:hover { background: var(--sunk); }
+#actMenu b { font-family: var(--mono); font-weight: 600; }
+#actMenu span { color: var(--mute); font-size: 12px; }
+#ctxHint { flex-basis: 100%; font-size: 13px; color: var(--warn); }
+#ctxHint button { margin-left: 6px; }

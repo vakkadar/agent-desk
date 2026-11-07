@@ -111,6 +111,8 @@ export function hostedSpawn(mux: HerdrMux, dataDir: string): SpawnFn {
         "#!/bin/bash",
         `echo $$ > ${q(join(dir, "pid"))}`,
         `cd ${q(o.cwd)} || exit 1`,
+        // Pane shells don't inherit our env: pass the approval wait through to Claude.
+        ...(process.env.MCP_TOOL_TIMEOUT ? [`export MCP_TOOL_TIMEOUT=${q(process.env.MCP_TOOL_TIMEOUT)}`] : []),
         `${[bin, ...args].map(q).join(" ")} < /dev/null > ${q(join(dir, "out.jsonl"))} 2> ${q(join(dir, "err.txt"))}`,
         `echo $? > ${q(join(dir, "exit.tmp"))} && mv ${q(join(dir, "exit.tmp"))} ${q(join(dir, "exit"))}`,
         "",

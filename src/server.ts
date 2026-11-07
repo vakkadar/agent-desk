@@ -25,6 +25,7 @@ import { Approvals } from "./approvals.js";
 import { handleMcp } from "./mcp/permission.js";
 import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
 import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
+import { contextUsed } from "./context.js";
 import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 
@@ -42,6 +43,9 @@ const store = new ThreadStore(cfg.dataDir);
 const mux = await createMux(cfg);
 const liveClaude = new LiveClaude(cfg.liveSessions);
 const mcpSecret = randomUUID();
+// Claude gives up on an MCP tool call after ~60s by default, and the browser approval is
+// one: let it wait as long as the desk does.
+process.env.MCP_TOOL_TIMEOUT ??= String((Math.max(...Object.values(cfg.approvalTimeoutMin)) + 1) * 60_000);
 const approvals = new Approvals(bus, (t) => (cfg.approvalTimeoutMin[t.split("-")[0] as "ask"] ?? 30) * 60_000);
 const agent = new ClaudeAgent({
   spawnFn: mux.spawn,
@@ -319,7 +323,8 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       if (busy.has(key)) throw new Error("thread busy");
       const ac = new AbortController();
       busy.set(key, ac);
-      const text = `${cfg.keyword}[${th.id}]: ${m.text}`; // FR-12
+      // FR-12 tag, except Claude commands like /compact, which must arrive as typed.
+      const text = String(m.text).trimStart().startsWith("/") ? String(m.text).trim() : `${cfg.keyword}[${th.id}]: ${m.text}`;
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
         const turn = live
@@ -329,6 +334,9 @@ async function handleAction(m: any, send: (m: unknown) => void) {
         for await (const ev of turn) {
           bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
         }
+        const sid = live?.sessionId ?? th.session.sessionId;
+        const used = sid ? await contextUsed(live?.cwd ?? th.session.cwd, sid).catch(() => undefined) : undefined;
+        if (used) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "context", used, limit: cfg.contextLimit } });
       } finally {
         busy.delete(key);
         await store.save(rec); // persists session id assigned on fork

@@ -30,6 +30,8 @@ export interface DeskConfig {
   permissionMode: Record<string, string>;
   /** Your own herdr sessions to look in for an open Claude per folder (live_sessions; [] turns it off). */
   liveSessions: string[];
+  /** Context window in tokens, for the /compact hint (context_limit). */
+  contextLimit: number;
 }
 
 export const DEFAULTS: DeskConfig = {
@@ -44,6 +46,7 @@ export const DEFAULTS: DeskConfig = {
   approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
   permissionMode: { general: "auto" },
   liveSessions: ["default"],
+  contextLimit: 200_000,
 };
 
 /** Load desk.toml from the data dir; missing file → defaults. */
@@ -75,5 +78,6 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
     permissionMode: { ...DEFAULTS.permissionMode, ...(raw.permission_mode ?? {}) },
     liveSessions: raw.live_sessions ?? DEFAULTS.liveSessions,
+    contextLimit: raw.context_limit ?? DEFAULTS.contextLimit,
   };
 }

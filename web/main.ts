@@ -169,8 +169,10 @@ function renderCards() {
   let steps: HTMLDetailsElement | null = null; // a card's tool calls, folded into one line
   let nSteps = 0;
   let running = false; // last turn has no "done" yet
+  let ctx: { used: number; limit: number } | null = null; // after the newest turn
   for (const { event: ev, seq } of evs) {
     if (ev.kind === "prompt") running = true;
+    if (ev.kind === "context") { ctx = ev; continue; }
     else if (ev.kind === "done") running = false;
     if (ev.kind === "prompt" || !card) {
       card = document.createElement("div");
@@ -252,6 +254,13 @@ function renderCards() {
       meta.textContent = "waiting for approval in the terminal window";
       card.append(meta);
     } else if (ev.kind === "usage" || ev.kind === "done") {
+      if (ev.kind === "done") // turn over: approvals left open can no longer be answered
+        card.querySelectorAll(".approval .ap-btns").forEach((r) => {
+          const x = document.createElement("div");
+          x.className = "meta";
+          x.textContent = "expired (turn ended)";
+          r.replaceWith(x);
+        });
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.textContent = ev.kind === "usage"
@@ -260,6 +269,7 @@ function renderCards() {
       card.append(meta);
     }
   }
+  showCtx(ctx, running);
   if (running && card) {
     const w = document.createElement("div");
     w.className = "meta working";
@@ -278,6 +288,55 @@ function renderCards() {
   // Text box sits on top, so newest turn goes right under it.
   root.append(...[...root.children].reverse());
   root.scrollTop = 0;
+}
+
+/** Context ≥ 70% full → suggest /compact under the text box. */
+function showCtx(c: { used: number; limit: number } | null, running: boolean) {
+  const el = $("#ctxHint");
+  const pct = c ? Math.round((100 * c.used) / c.limit) : 0;
+  el.hidden = !c || pct < 70 || running;
+  if (el.hidden) return;
+  el.replaceChildren(`Session context ${pct}% full (${Math.round(c!.used / 1000)}k). Compact it before it fills up. `);
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = "Send /compact";
+  b.onclick = () => sendText("/compact");
+  el.append(b);
+}
+
+function sendText(text: string) {
+  if (!state.source || (!state.thread && !isGeneral())) return alertStatus("pick a source and thread");
+  $("#promptErr").hidden = true;
+  lastSent = { text, at: Date.now() };
+  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text });
+}
+
+// ⋯ menu next to Send: Claude commands and the prefixes this box understands.
+const MENU: { label: string; hint: string; run: () => void }[] = [
+  { label: "/compact", hint: "summarize the session to free context", run: () => sendText("/compact") },
+  { label: "Stop", hint: "stop the running turn", run: () => act({ type: "cancel", sourceId: state.source, threadId: state.thread }) },
+  { label: "c: <id> message", hint: "General: continue q-3 · Project: pick window w3", run: () => insert("c: ") },
+  { label: "new: message", hint: "Project Ask: separate session, not your open window", run: () => insert("new: ") },
+  { label: "/<command>", hint: "any Claude command is passed as typed", run: () => insert("/") },
+];
+function insert(prefix: string) {
+  const ta = $<HTMLTextAreaElement>("#prompt textarea");
+  if (!ta.value.startsWith(prefix)) ta.value = prefix + ta.value;
+  ta.focus();
+}
+{
+  const menu = $("#actMenu");
+  menu.replaceChildren(...MENU.map((m) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = `<b></b><span></span>`;
+    b.querySelector("b")!.textContent = m.label;
+    b.querySelector("span")!.textContent = m.hint;
+    b.onclick = () => { menu.hidden = true; m.run(); };
+    return b;
+  }));
+  $("#actBtn").onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; };
+  document.addEventListener("click", (e) => { if (!menu.contains(e.target as Node)) menu.hidden = true; });
 }
 
 /** One-line gist of a tool call's input, so the card says what the agent is doing. */
@@ -518,9 +577,7 @@ promptForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const ta = promptForm.elements.namedItem("text") as HTMLTextAreaElement;
   if (!state.source || (!state.thread && !isGeneral()) || !ta.value.trim()) return alertStatus("pick a source and thread");
-  $("#promptErr").hidden = true;
-  lastSent = { text: ta.value, at: Date.now() };
-  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text: ta.value });
+  sendText(ta.value);
   ta.value = "";
 });
 promptForm.addEventListener("keydown", (e) => {

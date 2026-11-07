@@ -28,6 +28,7 @@ export type AgentEvent =
   | { kind: "approval_result"; id: string; decision: "allow" | "deny"; by: string }
   | { kind: "state"; state: AgentState }
   | { kind: "usage"; tokensIn: number; tokensOut: number; costUsd?: number }
+  | { kind: "context"; used: number; limit: number } // after a turn: how full the session is
   | { kind: "done"; outcome: "ok" | "error" | "cancelled"; error?: string };
 
 /** Event as stored and broadcast: carries a monotonic seq for replay (RH-3). */
