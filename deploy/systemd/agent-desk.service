@@ -1,0 +1,18 @@
+[Unit]
+Description=agent-desk web cockpit
+After=herdr.service network-online.target
+Wants=herdr.service
+
+[Service]
+Type=simple
+# @NODE@ and @REPO@ are substituted by deploy/install.sh
+WorkingDirectory=@REPO@
+EnvironmentFile=-%h/.config/agent-desk/env
+ExecStart=@NODE@ dist/server.js
+Restart=on-failure
+RestartSec=5
+# claude/herdr live in ~/.local/bin; node may live under nvm
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

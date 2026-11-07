@@ -266,4 +266,6 @@ promptForm.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.ctrlKey) promptForm.requestSubmit();
 });
 
+import "./health.js";
+
 connect();
