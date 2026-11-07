@@ -179,7 +179,7 @@ function renderCards() {
     } else if (ev.kind === "tool_call" || ev.kind === "tool_result") {
       const d = document.createElement("details");
       const s = document.createElement("summary");
-      s.textContent = ev.kind === "tool_call" ? `tool: ${ev.name}` : `result${ev.isError ? " (error)" : ""}`;
+      s.textContent = ev.kind === "tool_call" ? `${ev.name}: ${toolGist(ev.input)}` : `result${ev.isError ? " (error)" : ""}`;
       const pre = document.createElement("pre");
       pre.textContent = ev.kind === "tool_call" ? JSON.stringify(ev.input, null, 2) : ev.output;
       d.append(s, pre);
@@ -230,6 +230,12 @@ function renderCards() {
       card.append(meta);
     }
   }
+  if (running && card) {
+    const w = document.createElement("div");
+    w.className = "meta working";
+    w.textContent = "working…";
+    card.append(w);
+  }
   if (running && card && state.role === "action") {
     const b = document.createElement("button");
     b.type = "button";
@@ -242,6 +248,13 @@ function renderCards() {
   // Text box sits on top, so newest turn goes right under it.
   root.append(...[...root.children].reverse());
   root.scrollTop = 0;
+}
+
+/** One-line gist of a tool call's input, so the card says what the agent is doing. */
+function toolGist(input: any): string {
+  const v = input?.command ?? input?.description ?? input?.file_path ?? input?.pattern ?? input?.url ?? input?.query ?? input?.prompt;
+  const s = typeof v === "string" ? v : JSON.stringify(input ?? "");
+  return s.length > 140 ? s.slice(0, 140) + "…" : s;
 }
 
 function act(m: unknown) {
