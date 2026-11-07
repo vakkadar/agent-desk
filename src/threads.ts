@@ -9,7 +9,7 @@ export interface ThreadRec {
   mode: Mode;
   session: SessionRef;
   createdAt: string;
-  title?: string; // General questions: first prompt, for the list and `existing:` matching
+  title?: string; // General questions: first prompt, for the list and `c:` matching
 }
 
 export interface SourceRec {

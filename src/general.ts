@@ -1,6 +1,6 @@
 // General source: questions not tied to any project. Built in, always present.
 // Every prompt starts a fresh Claude session, unless the first line is
-// `existing: <thread id | session id prefix | words from its first prompt>`,
+// `c: <thread id | session id prefix | words from its first prompt>` (alias `existing:`),
 // which continues that session (forked if it is still live elsewhere).
 // With mux=herdr, a dedicated herdr session "general" keeps an interactive
 // Claude open in the same folder, so its sessions are matchable too.
@@ -19,7 +19,7 @@ export async function ensureGeneral(store: ThreadStore, agent: AgentAdapter, cwd
   const have = store.get(GENERAL_ID);
   if (have && have.location !== cwd) {
     // Moved: old q-N sessions live under the old folder's transcripts, so keep them
-    // pointing there; only the location (new questions, existing: search) moves.
+    // pointing there; only the location (new questions, c: search) moves.
     have.location = cwd;
     have.threads.ask.session = await agent.start({ cwd, name: "general" });
     await store.save(have);
@@ -34,9 +34,9 @@ export async function ensureGeneral(store: ThreadStore, agent: AgentAdapter, cwd
   return rec;
 }
 
-/** `existing: foo\nrest` → { query: "foo", rest: "rest" }. No prefix → null. */
+/** `c: foo\nrest` (or `existing: foo\nrest`) → { query: "foo", rest: "rest" }. No prefix → null. */
 export function parseExisting(text: string): { query: string; rest: string } | null {
-  const m = /^\s*existing:[ \t]*([^\n]*)(?:\n([\s\S]*))?$/i.exec(text);
+  const m = /^\s*(?:c|existing):[ \t]*([^\n]*)(?:\n([\s\S]*))?$/i.exec(text);
   if (!m) return null;
   return { query: m[1].trim(), rest: (m[2] ?? "").trim() };
 }
@@ -68,12 +68,12 @@ export interface Routed { thread: ThreadRec; text: string; created: boolean }
 
 /**
  * Pick (or create) the thread a General prompt goes to.
- * Throws when `existing:` matches nothing or has no message after it.
+ * Throws when `c:` matches nothing or has no message after it.
  */
 export async function routeGeneral(rec: SourceRec, agent: AgentAdapter, text: string, title = (t: string) => t): Promise<Routed> {
   const ex = parseExisting(text);
   const body = ex ? ex.rest : text.trim();
-  if (!body) throw new Error("existing: put your message on the next line");
+  if (!body) throw new Error("c: put your message on the next line");
   if (ex) {
     const th = matchThread(rec, ex.query);
     if (th) return { thread: th, text: body, created: false };

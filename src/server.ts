@@ -275,7 +275,7 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       const rec = need(store.get(m.sourceId), "source");
       let th;
       if (rec.id === GENERAL_ID) {
-        // General: new session per prompt unless "existing: <match>" on the first line.
+        // General: new session per prompt unless "c: <match>" on the first line.
         const r = await routeGeneral(rec, agent, String(m.text ?? ""), (t) => summarize(t, 80));
         th = r.thread;
         m.text = r.text;

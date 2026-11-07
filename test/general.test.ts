@@ -22,6 +22,9 @@ test("parseExisting: prefix on first line, message after", () => {
   assert.deepEqual(parseExisting("existing: q-2\nand then?"), { query: "q-2", rest: "and then?" });
   assert.deepEqual(parseExisting("  Existing:  tax stuff \n\n more\nlines "), { query: "tax stuff", rest: "more\nlines" });
   assert.deepEqual(parseExisting("existing: q-1"), { query: "q-1", rest: "" });
+  assert.deepEqual(parseExisting("c: q-3\nmore"), { query: "q-3", rest: "more" });
+  assert.deepEqual(parseExisting("C:tax\nx"), { query: "tax", rest: "x" });
+  assert.equal(parseExisting("calc: 2+2"), null);
 });
 
 test("routeGeneral: every plain prompt gets a new session", async () => {
@@ -43,7 +46,7 @@ test("routeGeneral: existing: matches id or title words, no new thread", async (
   assert.equal(byId.thread.id, "q-1");
   assert.equal(byId.text, "add Hyderabad");
   assert.equal(byId.created, false);
-  const byWords = await routeGeneral(r, agent, "existing: india TRIP\nmore");
+  const byWords = await routeGeneral(r, agent, "c: india TRIP\nmore");
   assert.equal(byWords.thread.id, "q-1");
   assert.equal(Object.keys(r.threads).length, 3);
 });

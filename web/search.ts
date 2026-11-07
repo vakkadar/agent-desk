@@ -1,4 +1,4 @@
-// Search tab (FR-10): server-side full-text search over the journal; click a hit to jump to it.
+// History tab (FR-10): server-side full-text search over the journal; click a hit to jump to it.
 export type Hit = { sourceId: string; threadId: string; seq: number; ts: string; kind: string; snippet: string; start: number; len: number };
 
 let root: HTMLElement;

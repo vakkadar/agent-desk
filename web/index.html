@@ -21,7 +21,8 @@
       <button data-mode="code">Code</button>
       <button data-mode="notes">Notes</button>
       <button data-mode="usage">Usage</button>
-      <button data-mode="search">Search</button>
+      <button data-mode="search" title="Search past prompts, answers and tool output">History</button>
+      <button data-mode="web" title="Search the web in a new browser tab">Web</button>
     </nav>
     <span id="status">offline</span>
     <button id="termBtn" type="button" title="Terminal (live herdr session). Hold Shift to select text when an app captures the mouse. Copy: select, or Ctrl+Shift+C; paste: Ctrl+Shift+V or right-click.">&gt;_ Terminal</button>
@@ -69,6 +70,7 @@
     </section>
     <div id="panelUsage" class="panel" hidden></div>
     <div id="panelSearch" class="panel" hidden></div>
+    <div id="panelWeb" class="panel" hidden><form class="searchbar"><input type="search" placeholder="Search the web or paste a URL (opens a new browser tab)" autocomplete="off" /></form></div>
   </main>
   <div id="termPanel" hidden>
     <div id="termGrip" title="Drag to resize"></div>

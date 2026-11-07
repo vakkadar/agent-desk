@@ -121,7 +121,7 @@ function renderThreads() {
       li("+ New question", state.thread === "ask", () => { state.thread = "ask"; renderThreads(); }),
       ...qs.map((t) => li(`${t.id} · ${t.title ?? ""}`, t.id === state.thread, () => { state.thread = t.id; renderThreads(); })),
     );
-    ta.placeholder = "Each message starts a new session. To continue one, first line: existing: q-3 (or words from it)";
+    ta.placeholder = "Each message starts a new session. To continue one, first line: c: q-3 (or words from it)";
   } else {
     const ids = src ? Object.keys(src.threads).filter((t) => (state.mode === "ask" ? t === "ask" : t.startsWith(state.mode + "-"))) : [];
     $("#threads").replaceChildren(...ids.map((t) => li(t, t === state.thread, () => { state.thread = t; renderThreads(); })));
@@ -273,7 +273,7 @@ $("#tabs").addEventListener("click", (e) => {
     renderSources();
     return;
   }
-  if (b.dataset.mode === "usage" || b.dataset.mode === "search") {
+  if (b.dataset.mode === "usage" || b.dataset.mode === "search" || b.dataset.mode === "web") {
     showPanel(b.dataset.mode);
     return;
   }
@@ -296,10 +296,20 @@ function showPanel(which: string) {
   mainEl.classList.toggle("paneled", !!which);
   $("#panelUsage").hidden = which !== "usage";
   $("#panelSearch").hidden = which !== "search";
+  $("#panelWeb").hidden = which !== "web";
+  if (which === "web") $<HTMLInputElement>("#panelWeb input").focus();
   if (which === "usage") showUsage();
   if (which === "search") showSearch();
 }
 initUsage($("#panelUsage"), (range) => wsSend({ type: "usage", range }));
+// Web: Google search (or a pasted URL) in a new browser tab.
+$("#panelWeb form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $<HTMLInputElement>("#panelWeb input").value.trim();
+  if (!q) return;
+  const url = /^https?:\/\/\S+$/i.test(q) ? q : `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  window.open(url, "_blank", "noopener");
+});
 initSearch($("#panelSearch"), (q) => wsSend({ type: "search", q }), gotoHit);
 function gotoHit(h: Hit) {
   const mode = h.threadId.startsWith("design-") ? "design" : h.threadId.startsWith("code-") ? "code" : "ask";
