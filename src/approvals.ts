@@ -25,7 +25,6 @@ export class Approvals {
     const id = randomUUID();
     return new Promise((resolve) => {
       const timer = setTimeout(() => this.resolve(id, false, "timeout"), this.timeoutMs(threadId));
-      timer.unref();
       this.pending.set(id, { sourceId, threadId, resolve, timer });
       this.bus.publish({ sourceId, threadId, event: { kind: "approval_request", id, tool, input } });
     });
