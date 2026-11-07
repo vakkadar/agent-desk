@@ -1,14 +1,14 @@
 // Claude Code adapter via headless stream-json. One process per turn; the session
 // lives in Claude's own transcript store, so it survives restarts/reboots (RH-2).
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createInterface } from "node:readline";
+import { directSpawn, type SpawnFn } from "../mux/spawn.js";
 import type { AgentAdapter, AgentEvent, Capabilities, SessionRef, StartOpts } from "../../types.js";
 
 export interface ClaudeOpts {
   bin?: string;
   permissionMode?: string; // e.g. "acceptEdits"; interactive approvals are TODO (FR-14)
   extraArgs?: string[];
+  spawnFn?: SpawnFn; // mux hook (RH-2); default = direct child process
 }
 
 export class ClaudeAgent implements AgentAdapter {
@@ -45,17 +45,15 @@ export class ClaudeAgent implements AgentAdapter {
   }
 
   async *send(ref: SessionRef, text: string): AsyncIterable<AgentEvent> {
-    const child = spawn(this.opts.bin ?? "claude", this.argsFor(ref, text), {
+    const child = (this.opts.spawnFn ?? directSpawn)(this.opts.bin ?? "claude", this.argsFor(ref, text), {
       cwd: ref.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      key: ref.sessionId || ref.forkFrom || randomUUID(),
     });
-    let stderr = "";
-    child.stderr.on("data", (d) => (stderr += d));
-    const exited = new Promise<number | null>((r) => child.on("close", r));
+    const exited = child.exited;
 
     yield { kind: "state", state: "working" };
     let sawResult = false;
-    for await (const line of createInterface({ input: child.stdout })) {
+    for await (const line of child.lines) {
       if (!line.trim()) continue;
       let msg: any;
       try {
@@ -76,7 +74,7 @@ export class ClaudeAgent implements AgentAdapter {
     }
     const code = await exited;
     if (!sawResult) {
-      yield { kind: "done", outcome: "error", error: `claude exited ${code}: ${stderr.slice(-500)}` };
+      yield { kind: "done", outcome: "error", error: `claude exited ${code}: ${child.stderr().slice(-500)}` };
     }
     yield { kind: "state", state: "idle" };
   }

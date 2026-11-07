@@ -10,15 +10,27 @@ import { Guard } from "./net/guard.js";
 import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
+import { createMux } from "./adapters/mux/index.js";
+import { recoverInto } from "./adapters/mux/recover.js";
 import type { Mode, Role } from "./types.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
-const agent = new ClaudeAgent({ permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
+const mux = await createMux(cfg);
+const agent = new ClaudeAgent({ spawnFn: mux.spawn, permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
 await bus.init();
 await store.load();
+await recoverInto(
+  mux,
+  cfg.dataDir,
+  (sid) => {
+    for (const rec of store.list())
+      for (const th of Object.values(rec.threads)) if (th.session.sessionId === sid) return { sourceId: rec.id, threadId: th.id };
+  },
+  (w, event) => bus.publish({ ...w, event }),
+);
 
 const webRoot = fileURLToPath(new URL("./web/", import.meta.url));
 const MIME: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" };
