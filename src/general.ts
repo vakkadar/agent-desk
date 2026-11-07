@@ -44,7 +44,7 @@ export function parseExisting(text: string): { query: string; rest: string } | n
   const query = m[1].trim();
   const rest = (m[2] ?? "").trim();
   if (!rest) {
-    const one = /^(q-\d+|[0-9a-f]{4,}[0-9a-f-]*)\s+(.+)$/i.exec(query);
+    const one = /^(q-?\d+|[0-9a-f]{4,}[0-9a-f-]*)\s+(.+)$/i.exec(query);
     if (one) return { query: one[1], rest: one[2].trim() };
   }
   return { query, rest };
@@ -60,7 +60,7 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 /** Desk threads first (exact id, then title words), newest first. */
 export function matchThread(rec: SourceRec, query: string): ThreadRec | undefined {
-  const q = norm(query);
+  const q = norm(query).replace(/^q(\d+)$/, "q-$1"); // q1 → q-1
   if (!q) return undefined;
   const qs = Object.values(rec.threads).filter((t) => t.id !== "ask").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return qs.find((t) => t.id === q) ?? qs.find((t) => t.title && norm(t.title).includes(q));
@@ -87,7 +87,11 @@ export async function routeGeneral(rec: SourceRec, agent: AgentAdapter, text: st
     const th = matchThread(rec, ex.query);
     if (th) return { thread: th, text: body, created: false };
     const s = matchSession(await listSessions(rec.location, { limit: 200 }), ex.query);
-    if (!s) throw new Error(`no General session matches "${ex.query}"`);
+    if (!s) {
+      const have = Object.values(rec.threads).filter((t) => t.id !== "ask").slice(-5)
+        .map((t) => `${t.id} "${(t.title ?? "").slice(0, 40)}"`).join(", ");
+      throw new Error(`no General question matches "${ex.query}"${have ? ` — try: ${have}` : ""}`);
+    }
     // A session already adopted by a desk thread → reuse that thread.
     const adopted = Object.values(rec.threads).find((t) => t.session.sessionId === s.id);
     if (adopted) return { thread: adopted, text: body, created: false };

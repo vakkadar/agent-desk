@@ -27,6 +27,7 @@ test("parseExisting: prefix on first line, message after", () => {
   assert.equal(parseExisting("calc: 2+2"), null);
   assert.deepEqual(parseExisting("c: q-1 its in Edge"), { query: "q-1", rest: "its in Edge" });
   assert.deepEqual(parseExisting("c: 6b4b0544 more"), { query: "6b4b0544", rest: "more" });
+  assert.deepEqual(parseExisting("c: q1 hi"), { query: "q1", rest: "hi" });
   assert.deepEqual(parseExisting("c: india trip"), { query: "india trip", rest: "" }); // words need the next line
 });
 
@@ -49,6 +50,7 @@ test("routeGeneral: existing: matches id or title words, no new thread", async (
   assert.equal(byId.thread.id, "q-1");
   assert.equal(byId.text, "add Hyderabad");
   assert.equal(byId.created, false);
+  assert.equal((await routeGeneral(r, agent, "c: q1 more")).thread.id, "q-1");
   const byWords = await routeGeneral(r, agent, "c: india TRIP\nmore");
   assert.equal(byWords.thread.id, "q-1");
   assert.equal(Object.keys(r.threads).length, 3);
@@ -57,7 +59,7 @@ test("routeGeneral: existing: matches id or title words, no new thread", async (
 test("routeGeneral: existing: errors", async () => {
   const r = rec();
   await assert.rejects(routeGeneral(r, agent, "existing: q-1"), /next line/);
-  await assert.rejects(routeGeneral(r, agent, "existing: nothing here\nhi"), /no General session matches/);
+  await assert.rejects(routeGeneral(r, agent, "existing: nothing here\nhi"), /no General question matches/);
 });
 
 test("matchSession: id prefix (4+ chars) then title", () => {
