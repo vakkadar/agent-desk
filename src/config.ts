@@ -6,6 +6,8 @@ import type { CfAccessOpts } from "./net/cfaccess.js";
 
 export interface DeskConfig {
   dataDir: string;
+  /** Folder for the built-in General source (general_dir in desk.toml; "~/" expands). */
+  generalDir: string;
   keyword: string; // message prefix, FR-12
   port: number;
   network: {
@@ -24,6 +26,7 @@ export interface DeskConfig {
 
 export const DEFAULTS: DeskConfig = {
   dataDir: join(homedir(), "agent-desk-data"),
+  generalDir: join(homedir(), "agent-desk-data", "general"),
   keyword: "browser",
   port: 7420,
   network: { bind: ["127.0.0.1"], actionAllow: ["127.0.0.1", "::1"], readonlyAllow: [] },
@@ -44,6 +47,7 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
   const net = raw.network ?? {};
   return {
     dataDir,
+    generalDir: raw.general_dir ? String(raw.general_dir).replace(/^~(?=\/|$)/, homedir()) : join(dataDir, "general"),
     keyword: raw.keyword ?? DEFAULTS.keyword,
     port: raw.port ?? DEFAULTS.port,
     network: {

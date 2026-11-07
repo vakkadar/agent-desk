@@ -53,8 +53,8 @@ registerHealth("mux", async () => {
 });
 await bus.init();
 await store.load();
-await ensureGeneral(store, agent, cfg.dataDir);
-if (mux.herdr) ensureGeneralHerdr(cfg.dataDir).catch((e) => console.warn("[general] herdr session:", e.message));
+await ensureGeneral(store, agent, cfg.generalDir);
+if (mux.herdr) ensureGeneralHerdr(cfg.dataDir, cfg.generalDir).catch((e) => console.warn("[general] herdr session:", e.message));
 await recoverInto(
   mux,
   cfg.dataDir,

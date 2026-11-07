@@ -12,13 +12,18 @@ import type { SourceRec, ThreadRec, ThreadStore } from "./threads.js";
 import type { AgentAdapter, SessionRef } from "./types.js";
 
 export const GENERAL_ID = "general";
-export const generalDir = (dataDir: string) => join(dataDir, "general");
 
-/** Create the built-in source on first boot. */
-export async function ensureGeneral(store: ThreadStore, agent: AgentAdapter, dataDir: string): Promise<SourceRec> {
-  const cwd = generalDir(dataDir);
+/** Create the built-in source on first boot; follow a changed general_dir. */
+export async function ensureGeneral(store: ThreadStore, agent: AgentAdapter, cwd: string): Promise<SourceRec> {
   await mkdir(cwd, { recursive: true });
   const have = store.get(GENERAL_ID);
+  if (have && have.location !== cwd) {
+    // Moved: old q-N sessions live under the old folder's transcripts, so keep them
+    // pointing there; only the location (new questions, existing: search) moves.
+    have.location = cwd;
+    have.threads.ask.session = await agent.start({ cwd, name: "general" });
+    await store.save(have);
+  }
   if (have) return have;
   const session = await agent.start({ cwd, name: "general" });
   const rec: SourceRec = {
@@ -93,9 +98,9 @@ function add(rec: SourceRec, session: SessionRef, title: string): ThreadRec {
 }
 
 /** herdr session "general" with an interactive Claude in the General folder. Never touches other sessions. */
-export async function ensureGeneralHerdr(dataDir: string, bin = "herdr", claude = "claude"): Promise<string> {
+export async function ensureGeneralHerdr(dataDir: string, cwd: string, bin = "herdr", claude = "claude"): Promise<string> {
   const mux = new HerdrMux("general", join(dataDir, ".index", "general-panes.json"), bin);
-  const p = await mux.ensurePane("claude", generalDir(dataDir));
+  const p = await mux.ensurePane(`claude:${cwd}`, cwd); // new folder → new pane
   if (p.fresh) await mux.cli(["pane", "run", p.id, claude]);
   return p.id;
 }
