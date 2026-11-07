@@ -1,4 +1,4 @@
-# Serving agent-desk at desk.sanatanadharma.cloud (HP host)
+# Serving agent-desk at agent-desk.sanatanadharma.cloud (HP host)
 
 Same pattern as `dev.sanatanadharma.cloud`: Cloudflare Tunnel from the HP desktop,
 Cloudflare Access (Zero Trust) login in front. agent-desk keeps binding to
@@ -21,7 +21,7 @@ all tunnel traffic is refused (fail closed).
 Zero Trust → Access → Applications → Add an application → **Self-hosted**:
 
 - Name: `agent-desk`
-- Domain: `desk.sanatanadharma.cloud`
+- Domain: `agent-desk.sanatanadharma.cloud`
 - Session duration: 24h (shorter is safer)
 - Policy: Allow → Include → Emails → your email. Require MFA if available.
 - Save, then copy the **Application Audience (AUD) Tag** from the app's Overview tab.
@@ -54,14 +54,14 @@ Add to the existing tunnel config on HP (`~/.cloudflared/config.yml`), **above**
 final `http_status:404` catch-all:
 
 ```yaml
-  - hostname: desk.sanatanadharma.cloud
+  - hostname: agent-desk.sanatanadharma.cloud
     service: http://localhost:7420
 ```
 
 Then:
 
 ```bash
-cloudflared tunnel route dns <tunnel-name> desk.sanatanadharma.cloud
+cloudflared tunnel route dns <tunnel-name> agent-desk.sanatanadharma.cloud
 sudo systemctl restart cloudflared
 ```
 
@@ -69,7 +69,7 @@ WebSockets work through the tunnel with no extra settings.
 
 ## 4. First login from a new browser
 
-1. Open `https://desk.sanatanadharma.cloud/#token=<AGENT_DESK_TOKEN>`.
+1. Open `https://agent-desk.sanatanadharma.cloud/#token=<AGENT_DESK_TOKEN>`.
 2. Cloudflare Access asks for login; after it, the page loads and stores the token
    in that browser's localStorage. The `#token` part never reaches the server logs.
 3. The status pill should say **connected**. **read-only** means the token is missing or wrong.
@@ -81,7 +81,7 @@ WebSockets work through the tunnel with no extra settings.
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7420/
 curl -s -o /dev/null -w '%{http_code}\n' -H 'cf-ray: x' http://127.0.0.1:7420/
 # From anywhere, logged out: 302 to sanatanadharma.cloudflareaccess.com
-curl -sI https://desk.sanatanadharma.cloud | head -3
+curl -sI https://agent-desk.sanatanadharma.cloud | head -3
 ```
 
 ## Kill switch
