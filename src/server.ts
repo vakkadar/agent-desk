@@ -18,6 +18,7 @@ import type { Mode, Role } from "./types.js";
 import { aggregateUsage, readJournal } from "./usage.js";
 import { searchEvents } from "./search.js";
 import { NotesRecorder, readNotes } from "./notes.js";
+import { onPtyClient, listSessions } from "./pty.js";
 import { DeskGit, gitStatus, setDeskGit } from "./git.js";
 
 const cfg = await loadConfig();
@@ -79,6 +80,11 @@ const http = createServer(async (req, res) => {
     res.end(JSON.stringify({ ok: true, uptime: process.uptime(), sources: store.list().length, checks: await collectHealth() }));
     return;
   }
+  if (req.url === "/pty/sessions") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(await listSessions()));
+    return;
+  }
   const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
   const file = join(webRoot, path === "/" ? "index.html" : path);
   if (!file.startsWith(webRoot)) {
@@ -105,9 +111,15 @@ function sameOrigin(req: IncomingMessage): boolean {
 }
 
 const wss = new WebSocketServer({ noServer: true });
+const ptyWss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
 http.on("upgrade", async (req, sock, head) => {
   if (!sameOrigin(req) || !(await admitted(req))) {
     sock.destroy();
+    return;
+  }
+  if ((req.url ?? "").split("?")[0] === "/pty") {
+    ptyWss.handleUpgrade(req, sock, head, (ws) =>
+      onPtyClient(ws, req, { resolveRole: (token) => (viaTunnel(req) ? guard.tunnelRole(token) : guard.roleFor(req.socket.remoteAddress ?? "", token)) }));
     return;
   }
   wss.handleUpgrade(req, sock, head, (ws) => onClient(ws, req));

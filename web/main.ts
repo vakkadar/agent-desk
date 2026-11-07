@@ -321,5 +321,7 @@ promptForm.addEventListener("keydown", (e) => {
 });
 
 import "./health.js";
+import { initTerminal } from "./terminal.js";
+initTerminal();
 
 connect();

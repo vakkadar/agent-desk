@@ -23,6 +23,7 @@
       <button data-mode="search">Search</button>
     </nav>
     <span id="status">offline</span>
+    <button id="termBtn" type="button" title="Terminal (live herdr session). Hold Shift to select text when an app captures the mouse. Copy: select, or Ctrl+Shift+C; paste: Ctrl+Shift+V or right-click.">&gt;_ Terminal</button>
     <button id="healthBtn" type="button">Health</button>
     <button id="theme" type="button">◐ Auto</button>
   </header>
@@ -65,6 +66,11 @@
     <div id="panelUsage" class="panel" hidden></div>
     <div id="panelSearch" class="panel" hidden></div>
   </main>
+  <div id="termPanel" hidden>
+    <div id="termGrip" title="Drag to resize"></div>
+    <div class="thead"><b>Terminal</b><select id="termSession" aria-label="herdr session"></select><span id="termRole"></span><span class="sp"></span><button type="button" id="termClose">Close</button></div>
+    <div id="termBody"><div id="termHost"></div><div id="termOverlay" hidden></div></div>
+  </div>
   <script type="module" src="./main.ts"></script>
   <dialog id="health"><div class="hhead"><b>Health</b><button type="button" id="healthClose">Close</button></div><div id="healthBody"></div></dialog>
 </body>

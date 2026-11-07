@@ -212,3 +212,19 @@ table.grid tr.mute td { color: var(--mute); }
 .note-response { border-left: 3px solid var(--acc); }
 .note-note, .note-commit { border-left: 3px solid var(--ok); }
 .note-approval { border-left: 3px solid var(--warn); }
+/* Terminal panel (FR-18) */
+#termPanel { position: relative; display: flex; flex-direction: column; height: 40vh; background: var(--sunk); border-top: 1px solid var(--line-strong); }
+#termPanel[hidden] { display: none; }
+#termGrip { position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 3; touch-action: none; }
+#termGrip:hover { background: var(--acc-soft); }
+#termPanel .thead { display: flex; gap: 10px; align-items: center; padding: 4px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#termPanel .sp { flex: 1; }
+#termRole { color: var(--warn); font-size: 12px; }
+#termBody { position: relative; flex: 1; min-height: 0; padding: 4px 8px; }
+#termHost { height: 100%; }
+#termOverlay { position: absolute; top: 8px; right: 14px; padding: 2px 10px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line-strong); color: var(--warn); font-size: 12px; z-index: 2; }
+#termOverlay[hidden] { display: none; }
+@media (max-width: 720px) {
+  #termPanel { position: fixed; inset: 0; height: auto !important; z-index: 50; }
+  #termGrip { display: none; }
+}
