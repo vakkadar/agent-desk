@@ -133,3 +133,61 @@ form#prompt textarea { resize: vertical; min-height: 44px; max-height: 40dvh; }
   #cards { padding: 16px; }
   form#prompt { padding: 10px 16px 12px; }
 }
+
+/* Markdown in answers (FR-15) */
+.card .a.md { white-space: normal; overflow-wrap: anywhere; }
+.a.md > :first-child { margin-top: 0; }
+.a.md > :last-child { margin-bottom: 0; }
+.a.md h1, .a.md h2, .a.md h3 { margin: 14px 0 6px; line-height: 1.3; }
+.a.md h1 { font-size: 1.3em; } .a.md h2 { font-size: 1.15em; } .a.md h3 { font-size: 1.05em; }
+.a.md p, .a.md ul, .a.md ol { margin: 8px 0; }
+.a.md li { margin: 2px 0; }
+.a.md code { font: 0.9em var(--mono); background: var(--sunk); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+.a.md pre { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow: auto; }
+.a.md pre code { background: none; border: 0; padding: 0; }
+.a.md a { color: var(--acc); }
+.a.md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--line-strong); color: var(--mute); }
+.a.md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+.a.md th, .a.md td { border: 1px solid var(--line); padding: 4px 10px; }
+.a.md th { background: var(--sunk); }
+.card.flash { outline: 2px solid var(--acc); outline-offset: 2px; }
+
+/* Usage + Search panels */
+main.paneled section { display: none; }
+.panel { padding: 24px; overflow: auto; min-width: 0; }
+.panel[hidden] { display: none; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--sunk); border: 1px solid var(--line); border-radius: 9px; margin-bottom: 16px; }
+.seg button { background: none; border: 0; color: var(--mute); padding: 4px 14px; border-radius: 6px; }
+.seg button.on { background: var(--panel); color: var(--fg); box-shadow: var(--shadow); font-weight: 550; }
+.tablewrap { overflow-x: auto; max-width: 880px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+table.grid { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+table.grid th, table.grid td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.grid th { color: var(--mute); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; background: var(--sunk); }
+table.grid .n { text-align: right; font-variant-numeric: tabular-nums; }
+table.grid tr.total td { font-weight: 650; border-bottom: 0; background: var(--sunk); }
+table.grid tr.mute td { color: var(--mute); }
+.searchbar { max-width: 880px; margin-bottom: 16px; display: flex; }
+.searchbar input { padding: 10px 12px; }
+.hits { max-width: 880px; display: flex; flex-direction: column; gap: 8px; }
+.hit { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+.hit:hover, .hit:focus-visible { border-color: var(--acc); outline: none; }
+.hitmeta { font-size: 12px; color: var(--mute); margin-bottom: 4px; }
+.snip { font-size: 13.5px; overflow-wrap: anywhere; }
+.snip mark { background: var(--acc-soft); color: var(--acc); font-weight: 600; border-radius: 3px; padding: 0 2px; }
+
+/* Phone */
+#sbToggle { display: none; }
+@media (max-width: 720px) {
+  #sbToggle { display: inline-block; min-height: 40px; min-width: 40px; }
+  button, nav#tabs button, #theme { min-height: 40px; }
+  aside li { padding: 10px 12px; }
+  nav#tabs { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  nav#tabs button { flex: none; white-space: nowrap; padding: 4px 14px; }
+  main { grid-template-rows: minmax(0, 1fr); }
+  body.sb-open main { grid-template-rows: auto minmax(0, 1fr); }
+  aside { display: none; }
+  body.sb-open aside { display: block; }
+  .panel { padding: 16px; }
+  form#prompt { position: sticky; bottom: 0; z-index: 2; }
+  textarea, input:not([type="radio"]) { font-size: 16px; min-height: 40px; }
+}

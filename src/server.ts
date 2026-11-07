@@ -11,6 +11,8 @@ import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
 import type { Mode, Role } from "./types.js";
+import { aggregateUsage, readJournal } from "./usage.js";
+import { searchEvents } from "./search.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -89,6 +91,13 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
       unsub();
       unsub = bus.subscribe((e) => send({ type: "event", e }));
+      return;
+    }
+    if (role && (m.type === "usage" || m.type === "search")) {
+      await bus.flush();
+      const evs = await readJournal(join(cfg.dataDir, ".index", "events.jsonl"));
+      if (m.type === "usage") send({ type: "usage", ...aggregateUsage(evs, m.range) });
+      else send({ type: "search", q: m.q, hits: searchEvents(evs, String(m.q ?? "")) });
       return;
     }
     if (role !== "action") return send({ type: "error", error: "read-only connection" });
