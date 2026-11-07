@@ -52,6 +52,8 @@ function onMsg(m: any) {
     state.role = m.role;
     state.sources = m.sources;
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
+    if (isGeneral()) state.mode = "ask";
+    if (!$("main").classList.contains("paneled") && state.mode !== "notes") syncTabs();
     alertStatus(m.role === "action" ? "connected" : "read-only", m.role === "action" ? "ok" : "");
     renderSources();
   } else if (m.type === "sources") {
@@ -87,13 +89,21 @@ function onMsg(m: any) {
 
 const GENERAL = "general";
 const isGeneral = () => state.source === GENERAL;
+/** Highlight the tab matching state: General when the General source is picked, else the mode. */
+function syncTabs() {
+  const on = isGeneral() ? "general" : state.mode;
+  document.querySelectorAll<HTMLElement>("#tabs button").forEach((x) => x.classList.toggle("on", x.dataset.mode === on));
+}
 
 function renderSources() {
   const ul = $("#sources");
-  const sorted = [...state.sources].sort((a, b) => Number(b.id === GENERAL) - Number(a.id === GENERAL));
-  ul.replaceChildren(...sorted.map((s) => li(s.id === GENERAL ? "General" : s.id, s.id === state.source, () => {
+  // General has its own tab; the Sources list holds project folders only.
+  for (const id of ["#srcHead", "#sources", "#attach"]) $(id).hidden = isGeneral();
+  $("#thrHead").textContent = isGeneral() ? "Questions" : "Threads";
+  ul.replaceChildren(...state.sources.filter((s) => s.id !== GENERAL).map((s) => li(s.id, s.id === state.source, () => {
     state.source = s.id;
     localStorageSet("source", s.id);
+    localStorageSet("lastSource", s.id);
     state.thread = state.mode === "ask" ? "ask" : "";
     renderSources();
   })));
@@ -253,6 +263,16 @@ $("#tabs").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button");
   if (!b || b.disabled) return;
   document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  if (b.dataset.mode === "general") {
+    showPanel("");
+    showNotes(false);
+    state.mode = "ask";
+    state.source = GENERAL;
+    state.thread = "ask";
+    localStorageSet("source", GENERAL);
+    renderSources();
+    return;
+  }
   if (b.dataset.mode === "usage" || b.dataset.mode === "search") {
     showPanel(b.dataset.mode);
     return;
@@ -261,7 +281,13 @@ $("#tabs").addEventListener("click", (e) => {
   state.mode = b.dataset.mode!;
   showNotes(state.mode === "notes");
   state.thread = state.mode === "ask" ? "ask" : "";
-  renderThreads();
+  if (isGeneral()) {
+    // Leaving General: back to the last project source.
+    const last = localStorageGet("lastSource");
+    state.source = state.sources.some((s) => s.id === last) ? last! : (state.sources.find((s) => s.id !== GENERAL)?.id ?? "");
+    localStorageSet("source", state.source);
+  }
+  renderSources();
 });
 // Usage / Search panels (read-only; work for any role) + phone sidebar toggle.
 const wsSend = (m: unknown) => state.ws?.readyState === WebSocket.OPEN && state.ws.send(JSON.stringify(m));
@@ -281,7 +307,7 @@ function gotoHit(h: Hit) {
   state.source = h.sourceId;
   state.thread = h.threadId;
   localStorageSet("source", h.sourceId);
-  document.querySelectorAll<HTMLElement>("#tabs button").forEach((x) => x.classList.toggle("on", x.dataset.mode === mode));
+  syncTabs();
   showPanel("");
   showNotes(false);
   renderSources();
