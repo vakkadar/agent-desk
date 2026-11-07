@@ -132,7 +132,7 @@ section { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .card details summary { cursor: pointer; padding: 5px 10px; color: var(--mute); font-family: var(--mono); }
 .card details pre { margin: 0; padding: 8px 10px; border-top: 1px solid var(--line); font: 12px/1.5 var(--mono); white-space: pre-wrap; max-height: 320px; overflow: auto; }
 .card .meta { padding: 8px 16px 0; color: var(--mute); font-size: 12px; }
-form#prompt { display: flex; gap: 8px; align-items: flex-end; padding: 12px 24px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+form#prompt { order: -1; display: flex; gap: 8px; align-items: flex-end; padding: 12px 24px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
 form#prompt textarea { resize: vertical; min-height: 44px; max-height: 40dvh; }
 
 @media (max-width: 720px) {
@@ -207,7 +207,7 @@ table.grid tr.mute td { color: var(--mute); }
   aside { display: none; }
   body.sb-open aside { display: block; }
   .panel { padding: 16px; }
-  form#prompt { position: sticky; bottom: 0; z-index: 2; }
+  form#prompt { position: sticky; top: 0; z-index: 2; }
   textarea, input:not([type="radio"]) { font-size: 16px; min-height: 40px; }
 }
 /* Notes tab */

@@ -149,7 +149,7 @@ function renderCards() {
   const root = $("#cards");
   root.replaceChildren();
   if (!evs.length) {
-    const hint = !state.source ? "Attach a source to get started." : !state.thread ? "Pick or create a thread." : "No messages yet. Ask something below.";
+    const hint = !state.source ? "Attach a source to get started." : !state.thread ? "Pick or create a thread." : "No messages yet. Ask something above.";
     root.append(Object.assign(document.createElement("div"), { className: "empty", textContent: hint }));
     return;
   }
@@ -227,7 +227,9 @@ function renderCards() {
       card.append(meta);
     }
   }
-  root.scrollTop = root.scrollHeight;
+  // Text box sits on top, so newest turn goes right under it.
+  root.append(...[...root.children].reverse());
+  root.scrollTop = 0;
 }
 
 function act(m: unknown) {
