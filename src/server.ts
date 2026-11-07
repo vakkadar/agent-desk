@@ -23,6 +23,7 @@ import { DeskGit, gitStatus, setDeskGit } from "./git.js";
 import { randomUUID } from "node:crypto";
 import { Approvals } from "./approvals.js";
 import { handleMcp } from "./mcp/permission.js";
+import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -226,12 +227,27 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       send({ type: "sources", sources: store.list() });
       return;
     }
+    case "sessions": {
+      // Past Claude sessions for a local source (resume picker).
+      const rec = need(store.get(m.sourceId), "source");
+      const sessions = rec.kind === "local" ? await listClaudeSessions(rec.location) : [];
+      send({ type: "sessions", sourceId: rec.id, sessions });
+      return;
+    }
     case "thread": {
       const rec = need(store.get(m.sourceId), "source");
       const mode = m.mode as Exclude<Mode, "ask">;
       if (mode !== "design" && mode !== "code") throw new Error("mode must be design|code");
       const id = store.nextThreadId(rec, mode);
-      const session = await agent.fork(rec.threads.ask.session);
+      let session;
+      if (m.resume !== undefined) {
+        // Continue (or fork, if still open elsewhere) an existing Claude session from this dir.
+        if (!isSessionId(m.resume) || rec.kind !== "local") throw new Error("bad session");
+        const known = (await listClaudeSessions(rec.location, { limit: 1000 })).find((s) => s.id === m.resume);
+        if (!known) throw new Error("no such session in this folder");
+        const base = { agent: agent.id, sessionId: m.resume, cwd: rec.location, started: true };
+        session = m.fork ? await agent.fork(base) : await agent.resume(base);
+      } else session = await agent.fork(rec.threads.ask.session);
       rec.threads[id] = { id, mode, session, createdAt: new Date().toISOString() };
       await store.save(rec);
       send({ type: "sources", sources: store.list() });

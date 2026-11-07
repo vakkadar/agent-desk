@@ -96,6 +96,16 @@ aside li:hover { background: var(--sunk); }
 aside li.on { background: var(--acc-soft); color: var(--acc); font-weight: 550; }
 #newThread { width: 100%; margin-top: 8px; border-style: dashed; color: var(--mute); }
 #newThread:hover { color: var(--fg); }
+#resumeBtn { width: 100%; margin-top: 6px; border-style: dashed; color: var(--mute); }
+#resumeBtn:hover { color: var(--fg); }
+#resumeList { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
+#resumeList ul { max-height: 300px; overflow: auto; padding: 4px; }
+#resumeList li { display: block; padding: 6px 8px; cursor: pointer; border-radius: 6px; }
+#resumeList li:hover { background: var(--line); }
+#resumeList .t { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#resumeList .m { font: 11px var(--mono); color: var(--mute); }
+#resumeList .live { color: var(--warn, #b26b00); font-weight: 600; }
+#resumeList .row { padding: 6px; border-top: 1px solid var(--line); }
 
 /* Attach form + folder browser */
 form#attach { margin: 6px 0; padding: 10px; background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; }

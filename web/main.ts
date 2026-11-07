@@ -68,6 +68,8 @@ function onMsg(m: any) {
   } else if (m.type === "ls") {
     if (m.tag === "browse") renderBrowser(m.dir, m.entries);
     else if (attachKind() === "local" && m.path === locInput.value) fillLocs(m.entries); // drop stale replies
+  } else if (m.type === "sessions") {
+    if (m.sourceId === state.source) renderResume(m.sessions);
   } else if (m.type === "usage") {
     onUsage(m);
   } else if (m.type === "search") {
@@ -95,6 +97,8 @@ function renderThreads() {
   const nb = $<HTMLButtonElement>("#newThread");
   nb.hidden = !src || state.mode === "ask" || state.role !== "action";
   nb.textContent = `New ${state.mode}`;
+  $("#resumeBtn").hidden = nb.hidden || src?.kind !== "local";
+  if ($("#resumeBtn").hidden) $("#resumeList").hidden = true;
   renderCards();
 }
 
@@ -344,6 +348,54 @@ attachForm.addEventListener("submit", (e) => {
   locInput.value = "";
 });
 $("#newThread").addEventListener("click", () => act({ type: "thread", sourceId: state.source, mode: state.mode }));
+// Resume picker: past Claude sessions in this source's folder (e.g. started in a terminal).
+type ClaudeSession = { id: string; mtime: string; title: string; live: boolean };
+$("#resumeBtn").addEventListener("click", () => act({ type: "sessions", sourceId: state.source }));
+$("#closeResume").addEventListener("click", () => { $("#resumeList").hidden = true; });
+function ago(iso: string): string {
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  return s < 90 ? "just now" : s < 5400 ? `${Math.round(s / 60)}m ago` : s < 129600 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`;
+}
+function renderResume(list: ClaudeSession[]) {
+  const box = $("#resumeList");
+  box.hidden = false;
+  if (!list.length) {
+    const li = document.createElement("li");
+    li.className = "m";
+    li.textContent = "No Claude sessions found for this folder.";
+    box.querySelector("ul")!.replaceChildren(li);
+    return;
+  }
+  box.querySelector("ul")!.replaceChildren(...list.map((s) => {
+    const li = document.createElement("li");
+    const t = document.createElement("div");
+    t.className = "t";
+    t.textContent = s.title || "(no prompt)";
+    t.title = s.title;
+    const m = document.createElement("div");
+    m.className = "m";
+    m.textContent = `${s.id.slice(0, 8)} · ${ago(s.mtime)}`;
+    if (s.live) {
+      const b = document.createElement("span");
+      b.className = "live";
+      b.textContent = " · active";
+      m.append(b);
+    }
+    li.append(t, m);
+    li.addEventListener("click", () => {
+      // An active session is probably open in a terminal: writing to it from here would interleave turns.
+      let fork = false;
+      if (s.live) {
+        if (!confirm("This session looks open in a terminal right now.\n\nOK = start a forked copy here (safe).\nCancel = do nothing.")) return;
+        fork = true;
+      }
+      const mode = state.mode === "design" ? "design" : "code";
+      act({ type: "thread", sourceId: state.source, mode, resume: s.id, fork });
+      box.hidden = true;
+    });
+    return li;
+  }));
+}
 const promptForm = $<HTMLFormElement>("#prompt");
 promptForm.addEventListener("submit", (e) => {
   e.preventDefault();
