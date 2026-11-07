@@ -200,6 +200,7 @@ function renderCards() {
       const pre = document.createElement("pre");
       pre.textContent = ev.kind === "tool_call" ? JSON.stringify(ev.input, null, 2) : ev.output;
       d.append(s, pre);
+      if (ev.kind === "tool_call") d.dataset.call = "1";
       if (!steps) {
         steps = document.createElement("details");
         steps.className = "steps";
@@ -261,6 +262,7 @@ function renderCards() {
           x.textContent = "expired (turn ended)";
           r.replaceWith(x);
         });
+      if (ev.kind === "done") foldWork(card);
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.textContent = ev.kind === "usage"
@@ -288,6 +290,22 @@ function renderCards() {
   // Text box sits on top, so newest turn goes right under it.
   root.append(...[...root.children].reverse());
   root.scrollTop = 0;
+}
+
+/** Turn over: steps, notes and approvals fold into one line, so the card reads question → answer. */
+function foldWork(card: HTMLElement) {
+  const kids = [...card.children] as HTMLElement[];
+  const final = kids.filter((k) => k.classList.contains("a")).pop();
+  const work = kids.filter((k) => !k.classList.contains("q") && k !== final && !(k.classList.contains("meta") && !k.classList.contains("working")));
+  if (!work.length) return;
+  const calls = card.querySelectorAll("[data-call]").length;
+  const aps = work.filter((k) => k.classList.contains("approval")).length;
+  const box = document.createElement("details");
+  box.className = "steps work";
+  const s = document.createElement("summary");
+  s.textContent = `Work: ${calls} step${calls === 1 ? "" : "s"}${aps ? ` · ${aps} approval${aps === 1 ? "" : "s"}` : ""} (click to see)`;
+  box.append(s, ...work);
+  card.querySelector(":scope > .q")!.after(box);
 }
 
 /** Context ≥ 70% full → suggest /compact under the text box. */
