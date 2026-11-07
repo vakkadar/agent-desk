@@ -17,7 +17,7 @@
       <button data-mode="ask" class="on">Ask</button>
       <button data-mode="design">Design</button>
       <button data-mode="code">Code</button>
-      <button data-mode="notes" disabled>Notes</button>
+      <button data-mode="notes">Notes</button>
       <button data-mode="usage" disabled>Usage</button>
       <button data-mode="search" disabled>Search</button>
     </nav>
@@ -53,6 +53,10 @@
       <button id="newThread" hidden>New</button>
     </aside>
     <section>
+      <div id="notesView" hidden>
+        <div class="bar"><button type="button" id="notesPrev">‹</button><input type="date" id="notesDate" /><button type="button" id="notesNext">›</button><button type="button" id="notesToday">Today</button></div>
+        <div id="notesList"></div>
+      </div>
       <div id="cards"></div>
       <form id="prompt"><textarea name="text" rows="3" placeholder="Message (Ctrl+Enter to send)"></textarea><button class="primary">Send</button></form>
     </section>

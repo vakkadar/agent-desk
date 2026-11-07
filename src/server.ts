@@ -11,6 +11,8 @@ import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
 import type { Mode, Role } from "./types.js";
+import { NotesRecorder, readNotes } from "./notes.js";
+import { DeskGit, setDeskGit } from "./git.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -19,6 +21,16 @@ const store = new ThreadStore(cfg.dataDir);
 const agent = new ClaudeAgent({ permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
 await bus.init();
 await store.load();
+
+// Notes + desk data repo git (FR-8, FR-19)
+const notes = new NotesRecorder(cfg.dataDir, cfg.agent);
+const deskGit = new DeskGit(cfg.dataDir, cfg.git);
+setDeskGit(deskGit);
+await deskGit.init().catch((e) => console.error("[git] init failed:", e.message));
+notes.onTurnEnd = (r) => deskGit.schedule(`${r.source_id}/${r.thread_id} ${r.outcome?.split(":")[0] ?? "turn"}`);
+deskGit.onFlag = (hits, files) => notes.record("note", `secrets redacted (${hits.join(", ")}) in ${files.join(", ")}`, { outcome: "secret-redacted" });
+deskGit.onCommit = (hash, msg) => notes.record("commit", `${hash} ${msg}`);
+notes.attach(bus);
 
 const webRoot = fileURLToPath(new URL("./web/", import.meta.url));
 const MIME: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" };
@@ -119,6 +131,11 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       send({ type: "ls", tag: m.tag, path: m.path, dir, entries });
       return;
     }
+    case "notes": {
+      const date = String(m.date || new Date().toISOString().slice(0, 10));
+      send({ type: "notes", date, rows: await readNotes(cfg.dataDir, date) });
+      return;
+    }
     case "attach": {
       let location = String(m.location).trim();
       if (sourceKind(location) === "local") {
@@ -190,6 +207,8 @@ for (const host of cfg.network.bind) {
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, async () => {
     await bus.flush();
+    await notes.flush();
+    await deskGit.commitNow();
     process.exit(0);
   });
 }

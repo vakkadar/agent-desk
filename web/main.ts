@@ -1,6 +1,8 @@
 // Minimal SPA: connect, replay, render turn cards per thread.
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
+import { initNotes, showNotes, renderNotes } from "./notes.js";
+
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
 const state = {
   ws: null as WebSocket | null,
@@ -58,6 +60,8 @@ function onMsg(m: any) {
     state.lastSeq = Math.max(state.lastSeq, e.seq);
     localStorageSet("lastSeq", String(state.lastSeq));
     if (e.sourceId === state.source && e.threadId === state.thread) renderCards();
+  } else if (m.type === "notes") {
+    renderNotes(m.date, m.rows);
   } else if (m.type === "ls") {
     if (m.tag === "browse") renderBrowser(m.dir, m.entries);
     else if (attachKind() === "local" && m.path === locInput.value) fillLocs(m.entries); // drop stale replies
@@ -171,11 +175,13 @@ themeBtn.addEventListener("click", () => {
 });
 applyTheme();
 
+initNotes((m) => state.ws?.send(JSON.stringify(m)));
 $("#tabs").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button");
   if (!b || b.disabled) return;
   document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
   state.mode = b.dataset.mode!;
+  showNotes(state.mode === "notes");
   state.thread = state.mode === "ask" ? "ask" : "";
   renderThreads();
 });
