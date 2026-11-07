@@ -22,6 +22,16 @@ export function initNotes(sendFn: (m: unknown) => void) {
   q("#notesPrev").addEventListener("click", () => shift(-1));
   q("#notesNext").addEventListener("click", () => shift(1));
   q("#notesToday").addEventListener("click", () => { date = today(); load(); });
+  const form = q<HTMLFormElement>("#noteAdd");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const ta = form.elements.namedItem("text") as HTMLTextAreaElement;
+    if (!ta.value.trim()) return;
+    send({ type: "note", text: ta.value });
+    ta.value = "";
+    date = today(); // server replies with today's notes
+  });
+  form.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.ctrlKey) form.requestSubmit(); });
   q<HTMLInputElement>("#notesDate").addEventListener("change", (e) => { date = (e.target as HTMLInputElement).value || date; load(); });
 }
 export function showNotes(on: boolean) {
@@ -42,7 +52,7 @@ export function renderNotes(d: string, rows: Row[]) {
   if (d !== date) return;
   const list = q("#notesList");
   const shown = rows.filter((r) => r.kind !== "prompt");
-  if (!shown.length) { list.replaceChildren(el("div", "note-m", `No activity on ${d}.`)); return; }
+  if (!shown.length) { list.replaceChildren(el("div", "note-m", `Nothing on ${d}. Every agent turn is recorded here automatically; add your own notes above.`)); return; }
   list.replaceChildren(...shown.map((r) => {
     const c = el("div", `note note-${r.kind}`);
     const where = r.source_id ? `${r.source_id}/${r.thread_id}` : "desk";

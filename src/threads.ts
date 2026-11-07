@@ -9,6 +9,7 @@ export interface ThreadRec {
   mode: Mode;
   session: SessionRef;
   createdAt: string;
+  title?: string; // General questions: first prompt, for the list and `existing:` matching
 }
 
 export interface SourceRec {
@@ -17,6 +18,7 @@ export interface SourceRec {
   location: string;
   agent: string;
   threads: Record<string, ThreadRec>; // "ask" is the base session
+  builtin?: boolean; // General: created by the desk, not attached by the user
 }
 
 export class ThreadStore {

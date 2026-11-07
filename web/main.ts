@@ -51,6 +51,7 @@ function onMsg(m: any) {
   if (m.type === "welcome") {
     state.role = m.role;
     state.sources = m.sources;
+    if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
     alertStatus(m.role === "action" ? "connected" : "read-only", m.role === "action" ? "ok" : "");
     renderSources();
   } else if (m.type === "sources") {
@@ -63,6 +64,11 @@ function onMsg(m: any) {
     state.lastSeq = Math.max(state.lastSeq, e.seq);
     localStorageSet("lastSeq", String(state.lastSeq));
     if (e.sourceId === state.source && e.threadId === state.thread) renderCards();
+  } else if (m.type === "focus") {
+    // Server picked/created the General thread for the prompt just sent.
+    state.source = m.sourceId;
+    state.thread = m.threadId;
+    renderSources();
   } else if (m.type === "notes") {
     renderNotes(m.date, m.rows);
   } else if (m.type === "ls") {
@@ -79,9 +85,13 @@ function onMsg(m: any) {
   }
 }
 
+const GENERAL = "general";
+const isGeneral = () => state.source === GENERAL;
+
 function renderSources() {
   const ul = $("#sources");
-  ul.replaceChildren(...state.sources.map((s) => li(s.id, s.id === state.source, () => {
+  const sorted = [...state.sources].sort((a, b) => Number(b.id === GENERAL) - Number(a.id === GENERAL));
+  ul.replaceChildren(...sorted.map((s) => li(s.id === GENERAL ? "General" : s.id, s.id === state.source, () => {
     state.source = s.id;
     localStorageSet("source", s.id);
     state.thread = state.mode === "ask" ? "ask" : "";
@@ -92,10 +102,23 @@ function renderSources() {
 
 function renderThreads() {
   const src = state.sources.find((s) => s.id === state.source);
-  const ids = src ? Object.keys(src.threads).filter((t) => (state.mode === "ask" ? t === "ask" : t.startsWith(state.mode + "-"))) : [];
-  $("#threads").replaceChildren(...ids.map((t) => li(t, t === state.thread, () => { state.thread = t; renderThreads(); })));
+  const ta = $<HTMLTextAreaElement>("#prompt textarea");
+  if (src?.id === GENERAL && state.mode === "ask") {
+    // General: "New question" entry + past questions, newest first.
+    const qs = Object.values<any>(src.threads).filter((t) => t.id !== "ask").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (!state.thread) state.thread = "ask";
+    $("#threads").replaceChildren(
+      li("+ New question", state.thread === "ask", () => { state.thread = "ask"; renderThreads(); }),
+      ...qs.map((t) => li(`${t.id} · ${t.title ?? ""}`, t.id === state.thread, () => { state.thread = t.id; renderThreads(); })),
+    );
+    ta.placeholder = "Each message starts a new session. To continue one, first line: existing: q-3 (or words from it)";
+  } else {
+    const ids = src ? Object.keys(src.threads).filter((t) => (state.mode === "ask" ? t === "ask" : t.startsWith(state.mode + "-"))) : [];
+    $("#threads").replaceChildren(...ids.map((t) => li(t, t === state.thread, () => { state.thread = t; renderThreads(); })));
+    ta.placeholder = "Message (Ctrl+Enter to send)";
+  }
   const nb = $<HTMLButtonElement>("#newThread");
-  nb.hidden = !src || state.mode === "ask" || state.role !== "action";
+  nb.hidden = !src || src.id === GENERAL || state.mode === "ask" || state.role !== "action";
   nb.textContent = `New ${state.mode}`;
   $("#resumeBtn").hidden = nb.hidden || src?.kind !== "local";
   if ($("#resumeBtn").hidden) $("#resumeList").hidden = true;
@@ -400,7 +423,7 @@ const promptForm = $<HTMLFormElement>("#prompt");
 promptForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const ta = promptForm.elements.namedItem("text") as HTMLTextAreaElement;
-  if (!state.source || !state.thread || !ta.value.trim()) return alertStatus("pick a source and thread");
+  if (!state.source || (!state.thread && !isGeneral()) || !ta.value.trim()) return alertStatus("pick a source and thread");
   act({ type: "prompt", sourceId: state.source, threadId: state.thread, text: ta.value });
   ta.value = "";
 });

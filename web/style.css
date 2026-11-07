@@ -214,6 +214,8 @@ table.grid tr.mute td { color: var(--mute); }
 #notesView { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; }
 #notesView[hidden], #cards[hidden], #prompt[hidden] { display: none; }
 #notesView .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+#noteAdd { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
+#noteAdd textarea { flex: 1; resize: vertical; min-height: 40px; }
 .note { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; box-shadow: var(--shadow); }
 .note-h { font: 12px var(--mono); color: var(--mute); }
 .note-q { color: var(--mute); font-style: italic; margin-top: 4px; white-space: pre-wrap; }

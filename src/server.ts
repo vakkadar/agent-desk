@@ -24,6 +24,8 @@ import { randomUUID } from "node:crypto";
 import { Approvals } from "./approvals.js";
 import { handleMcp } from "./mcp/permission.js";
 import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
+import { GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
+import { summarize } from "./notes.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -51,6 +53,8 @@ registerHealth("mux", async () => {
 });
 await bus.init();
 await store.load();
+await ensureGeneral(store, agent, cfg.dataDir);
+if (mux.herdr) ensureGeneralHerdr(cfg.dataDir).catch((e) => console.warn("[general] herdr session:", e.message));
 await recoverInto(
   mux,
   cfg.dataDir,
@@ -137,6 +141,8 @@ http.on("upgrade", async (req, sock, head) => {
 });
 
 const busy = new Set<string>(); // "source/thread" with a running turn
+const helloed = new Set<(m: unknown) => void>(); // senders of clients past "hello"
+const broadcastSources = () => { for (const s of helloed) s({ type: "sources", sources: store.list() }); };
 
 function onClient(ws: WebSocket, req: IncomingMessage) {
   const ip = req.socket.remoteAddress ?? "";
@@ -167,6 +173,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
       unsub();
       unsub = bus.subscribe((e) => send({ type: "event", e }));
+      helloed.add(send);
       return;
     }
     if (role && (m.type === "usage" || m.type === "search")) {
@@ -183,7 +190,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       send({ type: "error", error: String(e?.message ?? e) });
     }
   });
-  ws.on("close", () => unsub());
+  ws.on("close", () => { unsub(); helloed.delete(send); });
 }
 
 async function handleAction(m: any, send: (m: unknown) => void) {
@@ -209,6 +216,17 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       send({ type: "notes", date, rows: await readNotes(cfg.dataDir, date) });
       return;
     }
+    case "note": {
+      // Hand-written note (turns are recorded automatically).
+      const text = String(m.text ?? "").trim().slice(0, 4000);
+      if (!text) throw new Error("empty note");
+      notes.record("note", text, m.sourceId ? { source_id: String(m.sourceId) } : {});
+      await notes.flush();
+      const date = new Date().toISOString().slice(0, 10);
+      await notes.renderMarkdown(date);
+      send({ type: "notes", date, rows: await readNotes(cfg.dataDir, date) });
+      return;
+    }
     case "attach": {
       let location = String(m.location).trim();
       if (sourceKind(location) === "local") {
@@ -224,7 +242,7 @@ async function handleAction(m: any, send: (m: unknown) => void) {
         threads: { ask: { id: "ask", mode: "ask", session, createdAt: new Date().toISOString() } },
       };
       await store.save(rec);
-      send({ type: "sources", sources: store.list() });
+      broadcastSources();
       return;
     }
     case "sessions": {
@@ -255,7 +273,18 @@ async function handleAction(m: any, send: (m: unknown) => void) {
     }
     case "prompt": {
       const rec = need(store.get(m.sourceId), "source");
-      const th = need(rec.threads[m.threadId], "thread");
+      let th;
+      if (rec.id === GENERAL_ID) {
+        // General: new session per prompt unless "existing: <match>" on the first line.
+        const r = await routeGeneral(rec, agent, String(m.text ?? ""), (t) => summarize(t, 80));
+        th = r.thread;
+        m.text = r.text;
+        if (r.created) {
+          await store.save(rec);
+          broadcastSources();
+        }
+        send({ type: "focus", sourceId: rec.id, threadId: th.id });
+      } else th = need(rec.threads[m.threadId], "thread");
       const key = `${rec.id}/${th.id}`;
       if (busy.has(key)) throw new Error("thread busy");
       busy.add(key);

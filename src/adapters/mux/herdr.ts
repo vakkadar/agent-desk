@@ -74,7 +74,7 @@ export class HerdrMux implements MuxAdapter {
   }
 
   /** Pane for a conversation key: reuse the stored one if still alive, else create a workspace. */
-  async ensurePane(key: string, cwd: string): Promise<PaneRef> {
+  async ensurePane(key: string, cwd: string): Promise<PaneRef & { fresh?: boolean }> {
     await this.ensureServer();
     const map = await this.loadPanes();
     const live = new Set((await this.list()).map((p) => p.id));
@@ -86,7 +86,7 @@ export class HerdrMux implements MuxAdapter {
       await mkdir(dirname(this.panesFile), { recursive: true });
       await writeFile(this.panesFile, JSON.stringify(map, null, 1));
     }
-    return { mux: this.id, id };
+    return { mux: this.id, id, fresh: true };
   }
 
   async spawn(name: string, cmd: string[], cwd: string): Promise<PaneRef> {
