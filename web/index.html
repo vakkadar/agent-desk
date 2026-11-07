@@ -5,10 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>agent-desk</title>
   <link rel="stylesheet" href="./style.css" />
+  <script>
+    // Apply saved theme before first paint (no flash).
+    try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+  </script>
 </head>
 <body>
   <header>
-    <strong>agent-desk</strong>
+    <div class="brand"><span class="dot"></span>agent-desk</div>
     <nav id="tabs">
       <button data-mode="ask" class="on">Ask</button>
       <button data-mode="design">Design</button>
@@ -18,6 +22,7 @@
       <button data-mode="search" disabled>Search</button>
     </nav>
     <span id="status">offline</span>
+    <button id="theme" type="button">◐ Auto</button>
   </header>
   <main>
     <aside>
@@ -31,7 +36,7 @@
         <div class="row">
           <input name="location" list="locs" autocomplete="off" placeholder="~/projects/…" required />
           <button type="button" id="browse">Browse…</button>
-          <button>Attach</button>
+          <button class="primary">Attach</button>
         </div>
         <div id="browser" hidden>
           <div class="cwd"></div>
@@ -49,7 +54,7 @@
     </aside>
     <section>
       <div id="cards"></div>
-      <form id="prompt"><textarea name="text" rows="3" placeholder="Message (Ctrl+Enter to send)"></textarea><button>Send</button></form>
+      <form id="prompt"><textarea name="text" rows="3" placeholder="Message (Ctrl+Enter to send)"></textarea><button class="primary">Send</button></form>
     </section>
   </main>
   <script type="module" src="./main.ts"></script>

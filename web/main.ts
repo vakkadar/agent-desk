@@ -37,7 +37,7 @@ function connect() {
   };
   ws.onmessage = (m) => onMsg(JSON.parse(m.data));
   ws.onclose = () => {
-    $("#status").textContent = "reconnecting…";
+    alertStatus("reconnecting…", "warn");
     setTimeout(connect, (state.retry = Math.min(state.retry * 2, 10_000)));
   };
 }
@@ -46,7 +46,7 @@ function onMsg(m: any) {
   if (m.type === "welcome") {
     state.role = m.role;
     state.sources = m.sources;
-    $("#status").textContent = m.role === "action" ? "connected" : "read-only";
+    alertStatus(m.role === "action" ? "connected" : "read-only", m.role === "action" ? "ok" : "");
     renderSources();
   } else if (m.type === "sources") {
     state.sources = m.sources;
@@ -62,7 +62,7 @@ function onMsg(m: any) {
     if (m.tag === "browse") renderBrowser(m.dir, m.entries);
     else if (attachKind() === "local" && m.path === locInput.value) fillLocs(m.entries); // drop stale replies
   } else if (m.type === "error") {
-    $("#status").textContent = `error: ${m.error}`;
+    alertStatus(`error: ${m.error}`, "warn");
   }
 }
 
@@ -100,6 +100,11 @@ function renderCards() {
   const evs = state.events.filter((e) => e.sourceId === state.source && e.threadId === state.thread);
   const root = $("#cards");
   root.replaceChildren();
+  if (!evs.length) {
+    const hint = !state.source ? "Attach a source to get started." : !state.thread ? "Pick or create a thread." : "No messages yet. Ask something below.";
+    root.append(Object.assign(document.createElement("div"), { className: "empty", textContent: hint }));
+    return;
+  }
   let card: HTMLElement | null = null;
   let answer: HTMLElement | null = null;
   for (const { event: ev } of evs) {
@@ -142,7 +147,29 @@ function act(m: unknown) {
   if (state.role !== "action") return alertStatus("read-only");
   state.ws?.send(JSON.stringify(m));
 }
-function alertStatus(t: string) { $("#status").textContent = t; }
+function alertStatus(t: string, cls = "") {
+  const s = $("#status");
+  s.textContent = t;
+  s.className = cls;
+}
+
+// Theme: auto (follow OS) → light → dark. Head script applies the saved choice before paint.
+const THEMES = ["auto", "light", "dark"];
+const THEME_LABEL: Record<string, string> = { auto: "◐ Auto", light: "☀ Light", dark: "☾ Dark" };
+const themeBtn = $<HTMLButtonElement>("#theme");
+let theme = localStorageGet("theme") ?? "auto";
+function applyTheme() {
+  if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  themeBtn.textContent = THEME_LABEL[theme] ?? THEME_LABEL.auto;
+  themeBtn.title = `Theme: ${theme} (click to change)`;
+}
+themeBtn.addEventListener("click", () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  localStorageSet("theme", theme);
+  applyTheme();
+});
+applyTheme();
 
 $("#tabs").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button");
