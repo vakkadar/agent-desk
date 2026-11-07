@@ -200,3 +200,15 @@ table.grid tr.mute td { color: var(--mute); }
   form#prompt { position: sticky; bottom: 0; z-index: 2; }
   textarea, input:not([type="radio"]) { font-size: 16px; min-height: 40px; }
 }
+/* Notes tab */
+#notesView { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; }
+#notesView[hidden], #cards[hidden], #prompt[hidden] { display: none; }
+#notesView .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.note { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; box-shadow: var(--shadow); }
+.note-h { font: 12px var(--mono); color: var(--mute); }
+.note-q { color: var(--mute); font-style: italic; margin-top: 4px; white-space: pre-wrap; }
+.note-b { margin-top: 4px; white-space: pre-wrap; }
+.note-m { font: 12px var(--mono); color: var(--mute); margin-top: 4px; overflow-wrap: anywhere; }
+.note-response { border-left: 3px solid var(--acc); }
+.note-note, .note-commit { border-left: 3px solid var(--ok); }
+.note-approval { border-left: 3px solid var(--warn); }
