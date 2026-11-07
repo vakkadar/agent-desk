@@ -140,7 +140,7 @@ http.on("upgrade", async (req, sock, head) => {
   wss.handleUpgrade(req, sock, head, (ws) => onClient(ws, req));
 });
 
-const busy = new Set<string>(); // "source/thread" with a running turn
+const busy = new Map<string, AbortController>(); // "source/thread" with a running turn
 const helloed = new Set<(m: unknown) => void>(); // senders of clients past "hello"
 const broadcastSources = () => { for (const s of helloed) s({ type: "sources", sources: store.list() }); };
 
@@ -287,17 +287,26 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       } else th = need(rec.threads[m.threadId], "thread");
       const key = `${rec.id}/${th.id}`;
       if (busy.has(key)) throw new Error("thread busy");
-      busy.add(key);
+      const ac = new AbortController();
+      busy.set(key, ac);
       const text = `${cfg.keyword}[${th.id}]: ${m.text}`; // FR-12
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
-        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id })) {
+        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal })) {
           bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
         }
       } finally {
         busy.delete(key);
         await store.save(rec); // persists session id assigned on fork
       }
+      return;
+    }
+    case "cancel": {
+      // Stop a running turn: kill the agent process, deny its open approvals.
+      const ac = busy.get(`${m.sourceId}/${m.threadId}`);
+      if (!ac) throw new Error("nothing running in that thread");
+      ac.abort();
+      approvals.denyThread(String(m.sourceId), String(m.threadId), "cancelled");
       return;
     }
     case "approve": {

@@ -44,4 +44,9 @@ export class Approvals {
     p.resolve({ allow, by });
     return true;
   }
+
+  /** Deny every open request of a thread (turn cancelled). */
+  denyThread(sourceId: string, threadId: string, by: string): void {
+    for (const [id, p] of this.pending) if (p.sourceId === sourceId && p.threadId === threadId) this.resolve(id, false, by);
+  }
 }

@@ -233,6 +233,7 @@ table.grid tr.mute td { color: var(--mute); }
 .approval .ap-btns { display: flex; gap: 8px; margin-top: 6px; }
 .approval .ap-ok { background: var(--ok); border-color: var(--ok); color: var(--acc-fg); }
 .approval .ap-no { border-color: var(--warn); color: var(--warn); }
+.card .stop { margin-top: 6px; border-color: var(--warn); color: var(--warn); }
 /* Terminal panel (FR-18) */
 #termPanel { position: relative; display: flex; flex-direction: column; height: 40vh; background: var(--sunk); border-top: 1px solid var(--line-strong); }
 #termPanel[hidden] { display: none; }

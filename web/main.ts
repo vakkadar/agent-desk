@@ -155,7 +155,10 @@ function renderCards() {
   }
   let card: HTMLElement | null = null;
   let answer: HTMLElement | null = null;
+  let running = false; // last turn has no "done" yet
   for (const { event: ev, seq } of evs) {
+    if (ev.kind === "prompt") running = true;
+    else if (ev.kind === "done") running = false;
     if (ev.kind === "prompt" || !card) {
       card = document.createElement("div");
       card.className = "card";
@@ -226,6 +229,15 @@ function renderCards() {
         : ev.outcome === "ok" ? "done" : `${ev.outcome}: ${ev.error ?? ""}`;
       card.append(meta);
     }
+  }
+  if (running && card && state.role === "action") {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "stop";
+    b.textContent = "Stop";
+    const src = state.source, thr = state.thread;
+    b.onclick = () => { b.disabled = true; b.textContent = "Stopping…"; act({ type: "cancel", sourceId: src, threadId: thr }); };
+    card.append(b);
   }
   // Text box sits on top, so newest turn goes right under it.
   root.append(...[...root.children].reverse());

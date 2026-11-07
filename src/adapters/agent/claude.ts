@@ -2,7 +2,7 @@
 // lives in Claude's own transcript store, so it survives restarts/reboots (RH-2).
 import { randomUUID } from "node:crypto";
 import { directSpawn, type SpawnFn } from "../mux/spawn.js";
-import type { AgentAdapter, AgentEvent, Capabilities, SessionRef, StartOpts } from "../../types.js";
+import type { AgentAdapter, AgentEvent, Capabilities, SessionRef, StartOpts, TurnCtx } from "../../types.js";
 
 export interface ClaudeOpts {
   bin?: string;
@@ -53,12 +53,16 @@ export class ClaudeAgent implements AgentAdapter {
     return a.concat(this.opts.extraArgs ?? []);
   }
 
-  async *send(ref: SessionRef, text: string, ctx?: { sourceId: string; threadId: string }): AsyncIterable<AgentEvent> {
+  async *send(ref: SessionRef, text: string, ctx?: TurnCtx): AsyncIterable<AgentEvent> {
     const child = (this.opts.spawnFn ?? directSpawn)(this.opts.bin ?? "claude", this.argsFor(ref, text, ctx), {
       cwd: ref.cwd,
       key: ref.sessionId || ref.forkFrom || randomUUID(),
     });
     const exited = child.exited;
+    const sig = ctx?.signal;
+    const kill = () => child.kill();
+    if (sig?.aborted) kill();
+    else sig?.addEventListener("abort", kill, { once: true });
 
     yield { kind: "state", state: "working" };
     let sawResult = false;
@@ -83,7 +87,10 @@ export class ClaudeAgent implements AgentAdapter {
       }
     }
     const code = await exited;
-    if (!sawResult) {
+    sig?.removeEventListener("abort", kill);
+    if (sig?.aborted && !sawResult) {
+      yield { kind: "done", outcome: "cancelled" };
+    } else if (!sawResult) {
       yield { kind: "done", outcome: "error", error: `claude exited ${code}: ${child.stderr().slice(-500)}` };
     }
     yield { kind: "state", state: "idle" };

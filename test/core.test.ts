@@ -44,3 +44,20 @@ test("claude: maps stream-json", () => {
   const r = mapClaudeMessage({ type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01, usage: { input_tokens: 5, output_tokens: 7 } });
   assert.deepEqual(r.at(-1), { kind: "done", outcome: "ok" });
 });
+
+test("ClaudeAgent: aborting the signal kills the turn and reports cancelled", async () => {
+  const { directSpawn } = await import("../src/adapters/mux/spawn.js");
+  const c = new ClaudeAgent({ spawnFn: (_b, _a, o) => directSpawn("sleep", ["30"], o) });
+  const ac = new AbortController();
+  const t0 = Date.now();
+  const kinds: string[] = [];
+  let outcome = "";
+  for await (const ev of c.send({ agent: "claude", sessionId: "x", cwd: tmpdir() }, "hi", { sourceId: "s", threadId: "t", signal: ac.signal })) {
+    kinds.push(ev.kind);
+    if (ev.kind === "state" && ev.state === "working") ac.abort();
+    if (ev.kind === "done") outcome = ev.outcome;
+  }
+  assert.equal(outcome, "cancelled");
+  assert.deepEqual(kinds, ["state", "done", "state"]);
+  assert.ok(Date.now() - t0 < 5000);
+});

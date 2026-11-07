@@ -49,13 +49,20 @@ export interface Capabilities {
   canFork: boolean;
 }
 
+/** Where a turn runs; abort `signal` to cancel it (kills the agent process). */
+export interface TurnCtx {
+  sourceId: string;
+  threadId: string;
+  signal?: AbortSignal;
+}
+
 export interface AgentAdapter {
   id: string;
   capabilities(cwd: string): Promise<Capabilities>;
   start(opts: StartOpts): Promise<SessionRef>;
   resume(ref: SessionRef): Promise<SessionRef>;
   fork(ref: SessionRef, name: string): Promise<SessionRef>;
-  send(ref: SessionRef, text: string, ctx?: { sourceId: string; threadId: string }): AsyncIterable<AgentEvent>;
+  send(ref: SessionRef, text: string, ctx?: TurnCtx): AsyncIterable<AgentEvent>;
   approve(ref: SessionRef, reqId: string, allow: boolean): Promise<void>;
 }
 
