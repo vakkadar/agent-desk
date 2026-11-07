@@ -9,6 +9,8 @@ export interface ClaudeOpts {
   permissionMode?: string; // e.g. "acceptEdits"; interactive approvals are TODO (FR-14)
   extraArgs?: string[];
   spawnFn?: SpawnFn; // mux hook (RH-2); default = direct child process
+  /** Base URL of agent-desk's MCP permission endpoint, e.g. http://127.0.0.1:7420/mcp/<secret>. Enables approvals. */
+  approvalBase?: string;
 }
 
 export class ClaudeAgent implements AgentAdapter {
@@ -35,17 +37,24 @@ export class ClaudeAgent implements AgentAdapter {
   }
 
   /** Builds argv for one turn. Exported for tests. */
-  argsFor(ref: SessionRef, text: string): string[] {
+  argsFor(ref: SessionRef, text: string, ctx?: { sourceId: string; threadId: string }): string[] {
     const a = ["-p", text, "--output-format", "stream-json", "--verbose"];
     if (ref.forkFrom) a.push("--resume", ref.forkFrom, "--fork-session");
-    else if (this.started.has(ref.sessionId)) a.push("--resume", ref.sessionId);
+    else if (ref.started || this.started.has(ref.sessionId)) a.push("--resume", ref.sessionId);
     else a.push("--session-id", ref.sessionId);
-    if (this.opts.permissionMode) a.push("--permission-mode", this.opts.permissionMode);
+    // With approvals on, force "default" so the user's own defaultMode (e.g. auto) doesn't bypass prompts.
+    const pm = this.opts.permissionMode ?? (this.opts.approvalBase ? "default" : undefined);
+    if (pm) a.push("--permission-mode", pm);
+    if (this.opts.approvalBase && ctx) {
+      const url = `${this.opts.approvalBase}/${encodeURIComponent(ctx.sourceId)}/${encodeURIComponent(ctx.threadId)}`;
+      a.push("--mcp-config", JSON.stringify({ mcpServers: { desk: { type: "http", url } } }));
+      a.push("--permission-prompt-tool", "mcp__desk__approve");
+    }
     return a.concat(this.opts.extraArgs ?? []);
   }
 
-  async *send(ref: SessionRef, text: string): AsyncIterable<AgentEvent> {
-    const child = (this.opts.spawnFn ?? directSpawn)(this.opts.bin ?? "claude", this.argsFor(ref, text), {
+  async *send(ref: SessionRef, text: string, ctx?: { sourceId: string; threadId: string }): AsyncIterable<AgentEvent> {
+    const child = (this.opts.spawnFn ?? directSpawn)(this.opts.bin ?? "claude", this.argsFor(ref, text, ctx), {
       cwd: ref.cwd,
       key: ref.sessionId || ref.forkFrom || randomUUID(),
     });
@@ -66,6 +75,7 @@ export class ClaudeAgent implements AgentAdapter {
         ref.sessionId = msg.session_id;
         delete ref.forkFrom;
         this.started.add(ref.sessionId);
+        ref.started = true; // persisted by the caller: survives server restarts
       }
       for (const ev of mapClaudeMessage(msg)) {
         if (ev.kind === "done") sawResult = true;

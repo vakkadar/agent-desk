@@ -23,6 +23,7 @@ export interface NoteRow {
   duration_ms?: number;
   outcome?: string;
   tool?: string;
+  approval_id?: string;
   detail?: string;
 }
 
@@ -76,7 +77,10 @@ export class NotesRecorder {
         break;
       }
       case "approval_request":
-        this.write({ ...this.base(e, "approval"), tool: ev.tool, detail: summarize(ev.detail, 200), outcome: "requested" });
+        this.write({ ...this.base(e, "approval"), tool: ev.tool, detail: summarize(JSON.stringify(ev.input ?? {}), 200), approval_id: ev.id, outcome: "requested" });
+        break;
+      case "approval_result":
+        this.write({ ...this.base(e, "approval"), approval_id: ev.id, detail: `by ${ev.by}`, outcome: ev.decision });
         break;
       case "usage":
         t.tin += ev.tokensIn; t.tout += ev.tokensOut;

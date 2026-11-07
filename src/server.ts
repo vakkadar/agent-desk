@@ -19,6 +19,9 @@ import { aggregateUsage, readJournal } from "./usage.js";
 import { searchEvents } from "./search.js";
 import { NotesRecorder, readNotes } from "./notes.js";
 import { DeskGit, gitStatus, setDeskGit } from "./git.js";
+import { randomUUID } from "node:crypto";
+import { Approvals } from "./approvals.js";
+import { handleMcp } from "./mcp/permission.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -32,7 +35,13 @@ async function admitted(req: IncomingMessage): Promise<boolean> {
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const mux = await createMux(cfg);
-const agent = new ClaudeAgent({ spawnFn: mux.spawn, permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
+const mcpSecret = randomUUID();
+const approvals = new Approvals(bus, (t) => (cfg.approvalTimeoutMin[t.split("-")[0] as "ask"] ?? 30) * 60_000);
+const agent = new ClaudeAgent({
+  spawnFn: mux.spawn,
+  permissionMode: process.env.AGENT_DESK_PERMISSION_MODE,
+  approvalBase: `http://127.0.0.1:${cfg.port}/mcp/${mcpSecret}`,
+});
 registerBuiltinHealth(cfg.dataDir);
 registerHealth("mux", async () => {
   const s = await muxStatus();
@@ -74,6 +83,7 @@ const http = createServer(async (req, res) => {
     res.writeHead(403).end();
     return;
   }
+  if (!viaTunnel(req) && handleMcp(req, res, mcpSecret, approvals)) return;
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, uptime: process.uptime(), sources: store.list().length, checks: await collectHealth() }));
@@ -120,6 +130,15 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
   let role: Role | null = null;
   let unsub = () => {};
   const send = (m: unknown) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
+  // Keepalive: proxies (Cloudflare ~100s) drop idle sockets; also reaps dead mobile links.
+  let alive = true;
+  ws.on("pong", () => { alive = true; });
+  const ping = setInterval(() => {
+    if (!alive) return ws.terminate();
+    alive = false;
+    ws.ping();
+  }, 25_000);
+  ws.on("close", () => clearInterval(ping));
 
   ws.on("message", async (raw) => {
     let m: any;
@@ -215,13 +234,18 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       const text = `${cfg.keyword}[${th.id}]: ${m.text}`; // FR-12
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
-        for await (const ev of agent.send(th.session, text)) {
+        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id })) {
           bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
         }
       } finally {
         busy.delete(key);
         await store.save(rec); // persists session id assigned on fork
       }
+      return;
+    }
+    case "approve": {
+      // Role gate: handleAction is only reachable for action-role connections.
+      if (!approvals.resolve(String(m.id), m.allow === true, "browser")) throw new Error("approval already resolved or unknown");
       return;
     }
     default:

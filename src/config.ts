@@ -18,6 +18,8 @@ export interface DeskConfig {
   agent: string;
   mux: string;
   git: { push: boolean; remote: string }; // FR-22: push is opt-in
+  /** Minutes before a pending approval auto-denies, per mode ([approval_timeout_min] in desk.toml). */
+  approvalTimeoutMin: Record<"ask" | "design" | "code", number>;
 }
 
 export const DEFAULTS: DeskConfig = {
@@ -28,6 +30,7 @@ export const DEFAULTS: DeskConfig = {
   agent: "claude",
   mux: "herdr",
   git: { push: false, remote: "origin" },
+  approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
 };
 
 /** Load desk.toml from the data dir; missing file → defaults. */
@@ -55,5 +58,6 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     agent: raw.agent ?? DEFAULTS.agent,
     mux: raw.mux ?? DEFAULTS.mux,
     git: { push: raw.git?.push ?? DEFAULTS.git.push, remote: raw.git?.remote ?? DEFAULTS.git.remote },
+    approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
   };
 }
