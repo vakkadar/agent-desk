@@ -58,6 +58,9 @@ function onMsg(m: any) {
     state.lastSeq = Math.max(state.lastSeq, e.seq);
     localStorageSet("lastSeq", String(state.lastSeq));
     if (e.sourceId === state.source && e.threadId === state.thread) renderCards();
+  } else if (m.type === "ls") {
+    if (m.tag === "browse") renderBrowser(m.dir, m.entries);
+    else if (attachKind() === "local" && m.path === locInput.value) fillLocs(m.entries); // drop stale replies
   } else if (m.type === "error") {
     $("#status").textContent = `error: ${m.error}`;
   }
@@ -149,11 +152,79 @@ $("#tabs").addEventListener("click", (e) => {
   state.thread = state.mode === "ask" ? "ask" : "";
   renderThreads();
 });
-$("#attach").addEventListener("submit", (e) => {
+// Attach form: radio picks Local folder (server-side dir autocomplete) or URL (history autocomplete).
+const attachForm = $<HTMLFormElement>("#attach");
+const locInput = attachForm.elements.namedItem("location") as HTMLInputElement;
+const attachKind = () => (attachForm.querySelector("input[name=kind]:checked") as HTMLInputElement).value;
+
+function urlHistory(): string[] {
+  try { return JSON.parse(localStorageGet("urls") ?? "[]"); } catch { return []; }
+}
+function fillLocs(items: string[]) {
+  $("#locs").replaceChildren(...items.map((v) => Object.assign(document.createElement("option"), { value: v })));
+}
+function refreshLocs() {
+  if (attachKind() === "url") {
+    const fromSources = state.sources.filter((s) => s.kind !== "local").map((s) => s.location);
+    fillLocs([...new Set([...urlHistory(), ...fromSources])]);
+  } else if (state.role === "action") {
+    state.ws?.send(JSON.stringify({ type: "ls", path: locInput.value }));
+  }
+}
+
+let lsTimer = 0;
+locInput.addEventListener("input", () => {
+  clearTimeout(lsTimer);
+  lsTimer = window.setTimeout(refreshLocs, 150);
+});
+locInput.addEventListener("focus", refreshLocs);
+attachForm.addEventListener("change", (e) => {
+  if ((e.target as HTMLInputElement).name !== "kind") return;
+  const url = attachKind() === "url";
+  locInput.placeholder = url ? "https://github.com/…" : "~/projects/…";
+  locInput.type = url ? "url" : "text";
+  locInput.value = "";
+  $("#browse").hidden = url;
+  $("#browser").hidden = true;
+  refreshLocs();
+});
+
+// Folder browser: server lists dirs; click to descend, ".." to go up, select fills the input.
+const browser = $("#browser");
+let browseDir = "";
+function browseTo(dir: string) {
+  if (state.role !== "action") return alertStatus("read-only");
+  state.ws?.send(JSON.stringify({ type: "ls", tag: "browse", path: dir, limit: 500 }));
+}
+function renderBrowser(dir: string, entries: string[]) {
+  browseDir = dir;
+  browser.hidden = false;
+  browser.querySelector(".cwd")!.textContent = dir;
+  const trimmed = dir.replace(/\/+$/, "");
+  const parent = trimmed ? trimmed.slice(0, trimmed.lastIndexOf("/") + 1) : "";
+  const items = entries.map((p) => li(p.slice(dir.length), false, () => browseTo(p)));
+  if (parent) items.unshift(li("..", false, () => browseTo(parent)));
+  browser.querySelector("ul")!.replaceChildren(...items);
+}
+$("#browse").addEventListener("click", () => {
+  const v = locInput.value.trim();
+  browseTo(v ? (v.endsWith("/") ? v : v.slice(0, v.lastIndexOf("/") + 1) || "~/") : "~/");
+});
+$("#pickDir").addEventListener("click", () => {
+  locInput.value = browseDir;
+  browser.hidden = true;
+  locInput.focus();
+});
+$("#closeBrowser").addEventListener("click", () => { browser.hidden = true; });
+attachForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const f = e.target as HTMLFormElement;
-  act({ type: "attach", location: (f.elements.namedItem("location") as HTMLInputElement).value });
-  f.reset();
+  const location = locInput.value.trim();
+  if (attachKind() === "url") {
+    if (!/^https?:\/\//.test(location)) return alertStatus("URL must start with http(s)://");
+    localStorageSet("urls", JSON.stringify([location, ...urlHistory().filter((u) => u !== location)].slice(0, 20)));
+  }
+  act({ type: "attach", location });
+  locInput.value = "";
 });
 $("#newThread").addEventListener("click", () => act({ type: "thread", sourceId: state.source, mode: state.mode }));
 const promptForm = $<HTMLFormElement>("#prompt");
