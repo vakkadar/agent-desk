@@ -1,0 +1,31 @@
+:root { --bg: #fff; --fg: #1d1d1f; --mute: #6e6e73; --line: #e2e2e6; --card: #f7f7f9; --acc: #2f6feb; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151517; --fg: #e8e8ea; --mute: #9a9aa0; --line: #2c2c31; --card: #1d1d21; --acc: #6b9bff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+header { display: flex; gap: 12px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+nav button { background: none; border: 0; color: var(--mute); padding: 4px 8px; cursor: pointer; font: inherit; }
+nav button.on { color: var(--acc); border-bottom: 2px solid var(--acc); }
+#status { margin-left: auto; color: var(--mute); font-size: 13px; }
+main { display: grid; grid-template-columns: 260px 1fr; height: calc(100dvh - 49px); }
+aside { border-right: 1px solid var(--line); padding: 8px 16px; overflow: auto; }
+aside h3 { font-size: 12px; text-transform: uppercase; color: var(--mute); margin: 12px 0 4px; }
+aside ul { list-style: none; padding: 0; margin: 0; }
+aside li { padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+aside li.on { background: var(--card); color: var(--acc); }
+section { display: flex; flex-direction: column; min-width: 0; }
+#cards { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.card .q { font-weight: 600; margin-bottom: 6px; white-space: pre-wrap; }
+.card .a { white-space: pre-wrap; }
+.card details { color: var(--mute); font-size: 13px; margin: 4px 0; }
+.card details pre { white-space: pre-wrap; max-height: 300px; overflow: auto; }
+.card .meta { color: var(--mute); font-size: 12px; margin-top: 6px; }
+form#prompt { display: flex; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--line); }
+textarea, input { flex: 1; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+form#attach { display: flex; gap: 4px; margin-top: 6px; }
+@media (max-width: 720px) {
+  main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; min-height: calc(100dvh - 49px); }
+  aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 35dvh; }
+}
