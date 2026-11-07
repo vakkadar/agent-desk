@@ -123,7 +123,7 @@ form#attach .row button { flex: 1; }
 /* Conversation */
 section { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 #cards { flex: 1; overflow: auto; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
-#cards > .card { width: 100%; max-width: 880px; margin: 0 auto; }
+#cards > .card { width: 100%; max-width: 880px; margin: 0 auto; flex-shrink: 0; }
 .empty { margin: auto; text-align: center; color: var(--mute); max-width: 360px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; padding-bottom: 12px; }
 .card .q { padding: 10px 16px; background: var(--q-bg); border-bottom: 1px solid var(--line); font-weight: 550; white-space: pre-wrap; }
