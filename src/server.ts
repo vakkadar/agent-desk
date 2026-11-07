@@ -24,7 +24,7 @@ import { randomUUID } from "node:crypto";
 import { Approvals } from "./approvals.js";
 import { handleMcp } from "./mcp/permission.js";
 import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
-import { GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
+import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
 import { summarize } from "./notes.js";
 
 const cfg = await loadConfig();
@@ -274,7 +274,10 @@ async function handleAction(m: any, send: (m: unknown) => void) {
     case "prompt": {
       const rec = need(store.get(m.sourceId), "source");
       let th;
-      if (rec.id === GENERAL_ID) {
+      const picked = rec.id === GENERAL_ID && m.threadId !== "ask" ? rec.threads[m.threadId] : undefined;
+      if (picked && !parseExisting(String(m.text ?? ""))) {
+        th = picked; // General question picked in the list: continue it, no prefix needed
+      } else if (rec.id === GENERAL_ID) {
         // General: new session per prompt unless "c: <match>" on the first line.
         const r = await routeGeneral(rec, agent, String(m.text ?? ""), (t) => summarize(t, 80));
         th = r.thread;

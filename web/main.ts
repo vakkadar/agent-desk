@@ -130,7 +130,9 @@ function renderThreads() {
       li("+ New question", state.thread === "ask", () => { state.thread = "ask"; renderThreads(); }),
       ...qs.map((t) => li(`${t.id} · ${t.title ?? ""}`, t.id === state.thread, () => { state.thread = t.id; renderThreads(); })),
     );
-    ta.placeholder = "Each message starts a new session. To continue one, first line: c: q-3 (or words from it)";
+    ta.placeholder = state.thread === "ask"
+      ? "New question (new session). To continue one, pick it in the list or start with c: q-3"
+      : `Continuing ${state.thread}. Pick "+ New question" for a fresh session.`;
   } else {
     const ids = src ? Object.keys(src.threads).filter((t) => (state.mode === "ask" ? t === "ask" : t.startsWith(state.mode + "-"))) : [];
     $("#threads").replaceChildren(...ids.map((t) => li(t, t === state.thread, () => { state.thread = t; renderThreads(); })));
