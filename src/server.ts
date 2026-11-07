@@ -25,6 +25,7 @@ import { Approvals } from "./approvals.js";
 import { handleMcp } from "./mcp/permission.js";
 import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
 import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
+import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 
 const cfg = await loadConfig();
@@ -39,6 +40,7 @@ async function admitted(req: IncomingMessage): Promise<boolean> {
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const mux = await createMux(cfg);
+const liveClaude = new LiveClaude(cfg.liveSessions);
 const mcpSecret = randomUUID();
 const approvals = new Approvals(bus, (t) => (cfg.approvalTimeoutMin[t.split("-")[0] as "ask"] ?? 30) * 60_000);
 const agent = new ClaudeAgent({
@@ -288,6 +290,31 @@ async function handleAction(m: any, send: (m: unknown) => void) {
         }
         send({ type: "focus", sourceId: rec.id, threadId: th.id });
       } else th = need(rec.threads[m.threadId], "thread");
+      // Project Ask: go into the Claude window already open in that folder (one conversation
+      // per folder). "new:" skips it; "c: w3" picks a window when several are open.
+      let live: LivePane | undefined;
+      if (rec.id !== GENERAL_ID && th.id === "ask" && cfg.liveSessions.length) {
+        const raw = String(m.text ?? "");
+        const nw = /^\s*new:[ \t]*/i.exec(raw);
+        if (nw) m.text = raw.slice(nw[0].length).trim();
+        else {
+          const ex = parseExisting(raw);
+          const panes = await liveClaude.find(rec.location);
+          const pick = pickLive(panes, ex?.query);
+          if (ex) {
+            if (pick.kind === "none") throw new Error(`no open Claude window in ${rec.location} matches "${ex.query}"${panes.length ? `. Open:\n${listPanes(panes)}` : ""}`);
+            if (!ex.rest) throw new Error("c: add your message after the window id (c: w3 your message)");
+            m.text = ex.rest;
+          }
+          if (pick.kind === "many") throw new Error(`${pick.panes.length} Claude windows are open in ${rec.location}. Pick one:\n${listPanes(pick.panes)}\nor new: <message> for a separate session`);
+          if (pick.kind === "one") {
+            if (pick.pane.status === "working" || pick.pane.status === "blocked")
+              throw new Error(`Claude window ${pick.pane.paneId} is busy (${pick.pane.status}). Wait for it, or new: <message> for a separate session`);
+            live = pick.pane;
+          }
+        }
+        if (!String(m.text ?? "").trim()) throw new Error("empty message");
+      }
       const key = `${rec.id}/${th.id}`;
       if (busy.has(key)) throw new Error("thread busy");
       const ac = new AbortController();
@@ -295,7 +322,11 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       const text = `${cfg.keyword}[${th.id}]: ${m.text}`; // FR-12
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
-        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode] })) {
+        const turn = live
+          ? liveClaude.send(live, text, ac.signal)
+          : agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode] });
+        if (live) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: `_→ your Claude window ${live.paneId} (${live.title || live.sessionId?.slice(0, 8)})_\n\n` } });
+        for await (const ev of turn) {
           bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
         }
       } finally {

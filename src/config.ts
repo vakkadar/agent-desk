@@ -28,6 +28,8 @@ export interface DeskConfig {
    * In "auto", Claude decides; only what it would ask about reaches the browser.
    */
   permissionMode: Record<string, string>;
+  /** Your own herdr sessions to look in for an open Claude per folder (live_sessions; [] turns it off). */
+  liveSessions: string[];
 }
 
 export const DEFAULTS: DeskConfig = {
@@ -41,6 +43,7 @@ export const DEFAULTS: DeskConfig = {
   git: { push: false, remote: "origin" },
   approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
   permissionMode: { general: "auto" },
+  liveSessions: ["default"],
 };
 
 /** Load desk.toml from the data dir; missing file → defaults. */
@@ -71,5 +74,6 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     git: { push: raw.git?.push ?? DEFAULTS.git.push, remote: raw.git?.remote ?? DEFAULTS.git.remote },
     approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
     permissionMode: { ...DEFAULTS.permissionMode, ...(raw.permission_mode ?? {}) },
+    liveSessions: raw.live_sessions ?? DEFAULTS.liveSessions,
   };
 }

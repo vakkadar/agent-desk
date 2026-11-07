@@ -166,6 +166,8 @@ function renderCards() {
   }
   let card: HTMLElement | null = null;
   let answer: HTMLElement | null = null;
+  let steps: HTMLDetailsElement | null = null; // a card's tool calls, folded into one line
+  let nSteps = 0;
   let running = false; // last turn has no "done" yet
   for (const { event: ev, seq } of evs) {
     if (ev.kind === "prompt") running = true;
@@ -178,6 +180,8 @@ function renderCards() {
       q.textContent = ev.kind === "prompt" ? ev.text : "(continued)";
       card.append(q);
       answer = null;
+      steps = null;
+      nSteps = 0;
       root.append(card);
       card.dataset.seq = String(seq);
       if (ev.kind === "prompt") { card.dataset.last = String(seq); continue; }
@@ -194,7 +198,16 @@ function renderCards() {
       const pre = document.createElement("pre");
       pre.textContent = ev.kind === "tool_call" ? JSON.stringify(ev.input, null, 2) : ev.output;
       d.append(s, pre);
-      card.append(d);
+      if (!steps) {
+        steps = document.createElement("details");
+        steps.className = "steps";
+        steps.append(document.createElement("summary"));
+        card.append(steps);
+      }
+      steps.append(d);
+      if (ev.kind === "tool_call") nSteps++;
+      steps.querySelector(":scope > summary")!.textContent = `${nSteps} step${nSteps === 1 ? "" : "s"} · last: ${ev.kind === "tool_call" ? s.textContent : steps.dataset.last ?? ""}`;
+      if (ev.kind === "tool_call") steps.dataset.last = s.textContent ?? "";
       answer = null;
     } else if (ev.kind === "approval_request") {
       const res = evs.find((x) => x.event.kind === "approval_result" && x.event.id === ev.id)?.event as any;
@@ -232,6 +245,12 @@ function renderCards() {
       }
       card.append(ap);
       answer = null;
+      steps = null; // steps after an approval start a new group, keeping order readable
+    } else if (ev.kind === "state" && ev.state === "blocked") {
+      const meta = document.createElement("div");
+      meta.className = "meta working";
+      meta.textContent = "waiting for approval in the terminal window";
+      card.append(meta);
     } else if (ev.kind === "usage" || ev.kind === "done") {
       const meta = document.createElement("div");
       meta.className = "meta";

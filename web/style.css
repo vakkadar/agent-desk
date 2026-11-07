@@ -252,3 +252,7 @@ table.grid tr.mute td { color: var(--mute); }
   #termPanel { position: fixed; inset: 0; height: auto !important; z-index: 50; }
   #termGrip { display: none; }
 }
+.card details.steps { border: 1px dashed var(--line); border-radius: 8px; margin: 6px 0; }
+.card details.steps > summary { cursor: pointer; padding: 5px 10px; color: var(--mute); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card details.steps > details { margin: 4px 8px; }
+#promptErr { white-space: pre-line; }

@@ -1,7 +1,7 @@
 // herdr mux adapter: shells out to the `herdr` CLI. We never link herdr code
 // (AGPL); process boundary only. Verified against herdr 0.9.1.
-// All calls use a dedicated named session (default "agent-desk") so we never
-// touch the user's default herdr session. Raw TUI attach for recovery (RH-5):
+// All calls use a dedicated named session (default "agent-desk"); turns never
+// spawn panes in the user's own sessions (src/live.ts only types into them). Raw TUI attach (RH-5):
 //   herdr --session agent-desk            (local)
 //   herdr --remote <host> --session agent-desk
 import { execFile, spawn } from "node:child_process";

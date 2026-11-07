@@ -44,7 +44,7 @@ export function parseExisting(text: string): { query: string; rest: string } | n
   const query = m[1].trim();
   const rest = (m[2] ?? "").trim();
   if (!rest) {
-    const one = /^(q-?\d+|[0-9a-f]{4,}[0-9a-f-]*)\s+(.+)$/i.exec(query);
+    const one = /^([qQ]-?\d+|w[0-9A-Z]{1,2}(?::p\d+)?|[0-9a-f]{4,}[0-9a-f-]*)\s+(.+)$/.exec(query); // q-3, herdr pane w3, session id
     if (one) return { query: one[1], rest: one[2].trim() };
   }
   return { query, rest };
