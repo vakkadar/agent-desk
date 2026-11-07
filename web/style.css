@@ -24,7 +24,14 @@ section { display: flex; flex-direction: column; min-width: 0; }
 .card .meta { color: var(--mute); font-size: 12px; margin-top: 6px; }
 form#prompt { display: flex; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--line); }
 textarea, input { flex: 1; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
-form#attach { display: flex; gap: 4px; margin-top: 6px; }
+form#attach { margin-top: 6px; }
+form#attach .kinds { display: flex; gap: 12px; font-size: 13px; color: var(--mute); margin-bottom: 4px; }
+form#attach .kinds input { flex: none; }
+form#attach .row { display: flex; gap: 4px; }
+#browser { margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 6px; background: var(--card); }
+#browser .cwd { font-size: 12px; color: var(--mute); word-break: break-all; margin-bottom: 4px; }
+#browser ul { max-height: 240px; overflow: auto; margin-bottom: 6px; }
+#browser li { font-size: 13px; }
 @media (max-width: 720px) {
   main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; min-height: calc(100dvh - 49px); }
   aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 35dvh; }

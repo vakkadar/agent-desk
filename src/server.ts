@@ -1,7 +1,8 @@
 // agent-desk server: HTTP (static SPA) + WebSocket (events, prompts).
 import { createServer, type IncomingMessage } from "node:http";
-import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { loadConfig } from "./config.js";
@@ -102,8 +103,28 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
 
 async function handleAction(m: any, send: (m: unknown) => void) {
   switch (m.type) {
+    case "ls": {
+      // Directory autocomplete for the attach form: dirs under the typed prefix.
+      const raw = expandHome(String(m.path || "~/"));
+      const dir = raw.endsWith("/") ? raw : dirname(raw) + "/";
+      const prefix = raw.endsWith("/") ? "" : basename(raw);
+      let entries: string[] = [];
+      try {
+        entries = (await readdir(dir, { withFileTypes: true }))
+          .filter((d) => d.isDirectory() && d.name.startsWith(prefix) && (prefix.startsWith(".") || !d.name.startsWith(".")))
+          .map((d) => dir + d.name + "/")
+          .sort()
+          .slice(0, Math.min(Number(m.limit) || 50, 500));
+      } catch { /* missing or unreadable dir → no suggestions */ }
+      send({ type: "ls", tag: m.tag, path: m.path, dir, entries });
+      return;
+    }
     case "attach": {
-      const location = String(m.location);
+      let location = String(m.location).trim();
+      if (sourceKind(location) === "local") {
+        location = expandHome(location).replace(/\/+$/, "") || "/";
+        if (!(await stat(location).catch(() => null))?.isDirectory()) throw new Error(`not a directory: ${location}`);
+      }
       const id = slugify(m.name ?? location);
       if (store.get(id)) throw new Error(`source ${id} exists`);
       const cwd = sourceKind(location) === "local" ? location : cfg.dataDir;
@@ -148,6 +169,10 @@ async function handleAction(m: any, send: (m: unknown) => void) {
     default:
       throw new Error(`unknown message ${m.type}`);
   }
+}
+
+function expandHome(p: string): string {
+  return p === "~" ? homedir() + "/" : p.startsWith("~/") ? homedir() + p.slice(1) : p;
 }
 
 function need<T>(v: T | undefined, what: string): T {
