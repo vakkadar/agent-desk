@@ -84,6 +84,15 @@ function onMsg(m: any) {
     onSearch(m);
   } else if (m.type === "error") {
     alertStatus(`error: ${m.error}`, "warn");
+    // Rejected prompt: show why under the box and give the text back.
+    const ta = $<HTMLTextAreaElement>("#prompt textarea");
+    if (lastSent && Date.now() - lastSent.at < 10_000) {
+      if (!ta.value.trim()) ta.value = lastSent.text;
+      const e = $("#promptErr");
+      e.textContent = m.error;
+      e.hidden = false;
+      lastSent = null;
+    }
   }
 }
 
@@ -483,10 +492,13 @@ function renderResume(list: ClaudeSession[]) {
   }));
 }
 const promptForm = $<HTMLFormElement>("#prompt");
+let lastSent: { text: string; at: number } | null = null;
 promptForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const ta = promptForm.elements.namedItem("text") as HTMLTextAreaElement;
   if (!state.source || (!state.thread && !isGeneral()) || !ta.value.trim()) return alertStatus("pick a source and thread");
+  $("#promptErr").hidden = true;
+  lastSent = { text: ta.value, at: Date.now() };
   act({ type: "prompt", sourceId: state.source, threadId: state.thread, text: ta.value });
   ta.value = "";
 });

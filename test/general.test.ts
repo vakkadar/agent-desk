@@ -25,6 +25,9 @@ test("parseExisting: prefix on first line, message after", () => {
   assert.deepEqual(parseExisting("c: q-3\nmore"), { query: "q-3", rest: "more" });
   assert.deepEqual(parseExisting("C:tax\nx"), { query: "tax", rest: "x" });
   assert.equal(parseExisting("calc: 2+2"), null);
+  assert.deepEqual(parseExisting("c: q-1 its in Edge"), { query: "q-1", rest: "its in Edge" });
+  assert.deepEqual(parseExisting("c: 6b4b0544 more"), { query: "6b4b0544", rest: "more" });
+  assert.deepEqual(parseExisting("c: india trip"), { query: "india trip", rest: "" }); // words need the next line
 });
 
 test("routeGeneral: every plain prompt gets a new session", async () => {

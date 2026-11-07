@@ -34,11 +34,20 @@ export async function ensureGeneral(store: ThreadStore, agent: AgentAdapter, cwd
   return rec;
 }
 
-/** `c: foo\nrest` (or `existing: foo\nrest`) → { query: "foo", rest: "rest" }. No prefix → null. */
+/**
+ * `c: foo\nrest` (or `existing: foo\nrest`) → { query: "foo", rest: "rest" }. No prefix → null.
+ * One line works when the first word is an id: `c: q-3 more` or `c: 6b4b0544 more`.
+ */
 export function parseExisting(text: string): { query: string; rest: string } | null {
   const m = /^\s*(?:c|existing):[ \t]*([^\n]*)(?:\n([\s\S]*))?$/i.exec(text);
   if (!m) return null;
-  return { query: m[1].trim(), rest: (m[2] ?? "").trim() };
+  const query = m[1].trim();
+  const rest = (m[2] ?? "").trim();
+  if (!rest) {
+    const one = /^(q-\d+|[0-9a-f]{4,}[0-9a-f-]*)\s+(.+)$/i.exec(query);
+    if (one) return { query: one[1], rest: one[2].trim() };
+  }
+  return { query, rest };
 }
 
 export function nextQuestionId(rec: SourceRec): string {
@@ -73,7 +82,7 @@ export interface Routed { thread: ThreadRec; text: string; created: boolean }
 export async function routeGeneral(rec: SourceRec, agent: AgentAdapter, text: string, title = (t: string) => t): Promise<Routed> {
   const ex = parseExisting(text);
   const body = ex ? ex.rest : text.trim();
-  if (!body) throw new Error("c: put your message on the next line");
+  if (!body) throw new Error("c: add your message after the id (c: q-1 your message) or on the next line");
   if (ex) {
     const th = matchThread(rec, ex.query);
     if (th) return { thread: th, text: body, created: false };
