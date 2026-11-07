@@ -48,6 +48,14 @@ export class Guard {
     return null;
   }
 
+  /**
+   * Role for Cloudflare-Tunnel traffic that already passed Access. Action needs the
+   * token, and a token must be configured: Access login alone gives read-only.
+   */
+  tunnelRole(token?: string): Role {
+    return this.opts.actionToken && this.tokenOk(token) ? "action" : "readonly";
+  }
+
   private tokenOk(token?: string): boolean {
     const want = this.opts.actionToken;
     if (!want) return true; // no token configured: IP allowlist alone (localhost default)

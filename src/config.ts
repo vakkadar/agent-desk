@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "smol-toml";
+import type { CfAccessOpts } from "./net/cfaccess.js";
 
 export interface DeskConfig {
   dataDir: string;
@@ -12,6 +13,7 @@ export interface DeskConfig {
     actionAllow: string[];
     readonlyAllow: string[];
     actionToken?: string; // NFR-5; prefer env AGENT_DESK_TOKEN
+    cfAccess?: CfAccessOpts; // required to admit Cloudflare Tunnel traffic
   };
   agent: string;
   mux: string;
@@ -44,6 +46,9 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
       actionAllow: net.action_allow ?? DEFAULTS.network.actionAllow,
       readonlyAllow: net.readonly_allow ?? DEFAULTS.network.readonlyAllow,
       actionToken: process.env.AGENT_DESK_TOKEN ?? net.action_token,
+      cfAccess: net.cloudflare_access
+        ? { team: net.cloudflare_access.team, aud: net.cloudflare_access.aud, emails: net.cloudflare_access.emails }
+        : undefined,
     },
     agent: raw.agent ?? DEFAULTS.agent,
     mux: raw.mux ?? DEFAULTS.mux,

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { loadConfig } from "./config.js";
 import { Guard } from "./net/guard.js";
+import { CfAccess, viaTunnel } from "./net/cfaccess.js";
 import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
@@ -14,6 +15,13 @@ import type { Mode, Role } from "./types.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
+const cfAccess = cfg.network.cfAccess ? new CfAccess(cfg.network.cfAccess) : null;
+
+/** Admission for HTTP and WS upgrade. Tunnel traffic needs a valid Access JWT; fails closed if Access isn't configured. */
+async function admitted(req: IncomingMessage): Promise<boolean> {
+  if (viaTunnel(req)) return !!cfAccess && (await cfAccess.verify(req)) !== null;
+  return guard.roleFor(req.socket.remoteAddress ?? "") !== null;
+}
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const agent = new ClaudeAgent({ permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
@@ -24,7 +32,7 @@ const webRoot = fileURLToPath(new URL("./web/", import.meta.url));
 const MIME: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" };
 
 const http = createServer(async (req, res) => {
-  if (!guard.roleFor(req.socket.remoteAddress ?? "")) {
+  if (!(await admitted(req))) {
     res.writeHead(403).end();
     return;
   }
@@ -59,8 +67,8 @@ function sameOrigin(req: IncomingMessage): boolean {
 }
 
 const wss = new WebSocketServer({ noServer: true });
-http.on("upgrade", (req, sock, head) => {
-  if (!sameOrigin(req) || !guard.roleFor(req.socket.remoteAddress ?? "")) {
+http.on("upgrade", async (req, sock, head) => {
+  if (!sameOrigin(req) || !(await admitted(req))) {
     sock.destroy();
     return;
   }
@@ -83,7 +91,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       return;
     }
     if (m.type === "hello") {
-      role = guard.roleFor(ip, m.token);
+      role = viaTunnel(req) ? guard.tunnelRole(m.token) : guard.roleFor(ip, m.token);
       if (!role) return ws.close(4003, "forbidden");
       send({ type: "welcome", role, keyword: cfg.keyword, sources: store.list() });
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
