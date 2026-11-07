@@ -181,7 +181,7 @@ locInput.addEventListener("focus", refreshLocs);
 attachForm.addEventListener("change", (e) => {
   if ((e.target as HTMLInputElement).name !== "kind") return;
   const url = attachKind() === "url";
-  locInput.placeholder = url ? "https://github.com/…" : "~/projects/…";
+  locInput.placeholder = url ? "https://…" : "~/projects/…";
   locInput.type = url ? "url" : "text";
   locInput.value = "";
   $("#browse").hidden = url;
