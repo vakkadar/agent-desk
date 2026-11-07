@@ -292,7 +292,7 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       const text = `${cfg.keyword}[${th.id}]: ${m.text}`; // FR-12
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
-        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal })) {
+        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode] })) {
           bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
         }
       } finally {

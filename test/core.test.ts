@@ -61,3 +61,13 @@ test("ClaudeAgent: aborting the signal kills the turn and reports cancelled", as
   assert.deepEqual(kinds, ["state", "done", "state"]);
   assert.ok(Date.now() - t0 < 5000);
 });
+
+test("ClaudeAgent: per-turn permission mode overrides the approvals default", () => {
+  const c = new ClaudeAgent({ approvalBase: "http://x" });
+  const ref = { agent: "claude", sessionId: "s", cwd: "/" };
+  const at = (a: string[]) => a[a.indexOf("--permission-mode") + 1];
+  assert.equal(at(c.argsFor(ref, "hi", { sourceId: "p", threadId: "ask" })), "default");
+  const a = c.argsFor(ref, "hi", { sourceId: "general", threadId: "q-1", permissionMode: "auto" });
+  assert.equal(at(a), "auto");
+  assert.ok(a.includes("--permission-prompt-tool")); // anything auto would ask still reaches the browser
+});

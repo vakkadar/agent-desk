@@ -22,6 +22,12 @@ export interface DeskConfig {
   git: { push: boolean; remote: string }; // FR-22: push is opt-in
   /** Minutes before a pending approval auto-denies, per mode ([approval_timeout_min] in desk.toml). */
   approvalTimeoutMin: Record<"ask" | "design" | "code", number>;
+  /**
+   * Claude --permission-mode per source id or thread mode ([permission_mode] in desk.toml).
+   * Source id wins over mode. Unlisted → "default" (every tool asks in the browser).
+   * In "auto", Claude decides; only what it would ask about reaches the browser.
+   */
+  permissionMode: Record<string, string>;
 }
 
 export const DEFAULTS: DeskConfig = {
@@ -34,6 +40,7 @@ export const DEFAULTS: DeskConfig = {
   mux: "herdr",
   git: { push: false, remote: "origin" },
   approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
+  permissionMode: { general: "auto" },
 };
 
 /** Load desk.toml from the data dir; missing file → defaults. */
@@ -63,5 +70,6 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     mux: raw.mux ?? DEFAULTS.mux,
     git: { push: raw.git?.push ?? DEFAULTS.git.push, remote: raw.git?.remote ?? DEFAULTS.git.remote },
     approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
+    permissionMode: { ...DEFAULTS.permissionMode, ...(raw.permission_mode ?? {}) },
   };
 }

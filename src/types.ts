@@ -54,6 +54,8 @@ export interface TurnCtx {
   sourceId: string;
   threadId: string;
   signal?: AbortSignal;
+  /** Claude --permission-mode for this turn; overrides the adapter default. */
+  permissionMode?: string;
 }
 
 export interface AgentAdapter {

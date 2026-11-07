@@ -37,13 +37,13 @@ export class ClaudeAgent implements AgentAdapter {
   }
 
   /** Builds argv for one turn. Exported for tests. */
-  argsFor(ref: SessionRef, text: string, ctx?: { sourceId: string; threadId: string }): string[] {
+  argsFor(ref: SessionRef, text: string, ctx?: TurnCtx): string[] {
     const a = ["-p", text, "--output-format", "stream-json", "--verbose"];
     if (ref.forkFrom) a.push("--resume", ref.forkFrom, "--fork-session");
     else if (ref.started || this.started.has(ref.sessionId)) a.push("--resume", ref.sessionId);
     else a.push("--session-id", ref.sessionId);
     // With approvals on, force "default" so the user's own defaultMode (e.g. auto) doesn't bypass prompts.
-    const pm = this.opts.permissionMode ?? (this.opts.approvalBase ? "default" : undefined);
+    const pm = ctx?.permissionMode ?? this.opts.permissionMode ?? (this.opts.approvalBase ? "default" : undefined);
     if (pm) a.push("--permission-mode", pm);
     if (this.opts.approvalBase && ctx) {
       const url = `${this.opts.approvalBase}/${encodeURIComponent(ctx.sourceId)}/${encodeURIComponent(ctx.threadId)}`;
