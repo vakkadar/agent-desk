@@ -1,4 +1,7 @@
 // Minimal SPA: connect, replay, render turn cards per thread.
+import { renderMarkdown } from "./markdown.js";
+import { initUsage, showUsage, onUsage } from "./usage.js";
+import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -61,6 +64,10 @@ function onMsg(m: any) {
   } else if (m.type === "ls") {
     if (m.tag === "browse") renderBrowser(m.dir, m.entries);
     else if (attachKind() === "local" && m.path === locInput.value) fillLocs(m.entries); // drop stale replies
+  } else if (m.type === "usage") {
+    onUsage(m);
+  } else if (m.type === "search") {
+    onSearch(m);
   } else if (m.type === "error") {
     alertStatus(`error: ${m.error}`, "warn");
   }
@@ -107,7 +114,7 @@ function renderCards() {
   }
   let card: HTMLElement | null = null;
   let answer: HTMLElement | null = null;
-  for (const { event: ev } of evs) {
+  for (const { event: ev, seq } of evs) {
     if (ev.kind === "prompt" || !card) {
       card = document.createElement("div");
       card.className = "card";
@@ -117,11 +124,14 @@ function renderCards() {
       card.append(q);
       answer = null;
       root.append(card);
-      if (ev.kind === "prompt") continue;
+      card.dataset.seq = String(seq);
+      if (ev.kind === "prompt") { card.dataset.last = String(seq); continue; }
     }
+    card.dataset.last = String(seq);
     if (ev.kind === "text") {
-      if (!answer) { answer = document.createElement("div"); answer.className = "a"; card.append(answer); }
-      answer.textContent += ev.text;
+      if (!answer) { answer = document.createElement("div"); answer.className = "a md"; card.append(answer); }
+      answer.dataset.raw = (answer.dataset.raw ?? "") + ev.text;
+      answer.innerHTML = renderMarkdown(answer.dataset.raw);
     } else if (ev.kind === "tool_call" || ev.kind === "tool_result") {
       const d = document.createElement("details");
       const s = document.createElement("summary");
@@ -175,10 +185,47 @@ $("#tabs").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button");
   if (!b || b.disabled) return;
   document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  if (b.dataset.mode === "usage" || b.dataset.mode === "search") {
+    showPanel(b.dataset.mode);
+    return;
+  }
+  showPanel("");
   state.mode = b.dataset.mode!;
   state.thread = state.mode === "ask" ? "ask" : "";
   renderThreads();
 });
+// Usage / Search panels (read-only; work for any role) + phone sidebar toggle.
+const wsSend = (m: unknown) => state.ws?.readyState === WebSocket.OPEN && state.ws.send(JSON.stringify(m));
+function showPanel(which: string) {
+  const mainEl = $("main");
+  mainEl.classList.toggle("paneled", !!which);
+  $("#panelUsage").hidden = which !== "usage";
+  $("#panelSearch").hidden = which !== "search";
+  if (which === "usage") showUsage();
+  if (which === "search") showSearch();
+}
+initUsage($("#panelUsage"), (range) => wsSend({ type: "usage", range }));
+initSearch($("#panelSearch"), (q) => wsSend({ type: "search", q }), gotoHit);
+function gotoHit(h: Hit) {
+  const mode = h.threadId.startsWith("design-") ? "design" : h.threadId.startsWith("code-") ? "code" : "ask";
+  state.mode = mode;
+  state.source = h.sourceId;
+  state.thread = h.threadId;
+  localStorageSet("source", h.sourceId);
+  document.querySelectorAll<HTMLElement>("#tabs button").forEach((x) => x.classList.toggle("on", x.dataset.mode === mode));
+  showPanel("");
+  renderSources();
+  const cards = [...document.querySelectorAll<HTMLElement>("#cards .card")];
+  const c = cards.find((x) => Number(x.dataset.seq) <= h.seq && h.seq <= Number(x.dataset.last));
+  if (c) {
+    c.scrollIntoView({ block: "center" });
+    c.classList.add("flash");
+    setTimeout(() => c.classList.remove("flash"), 1800);
+  }
+}
+$("#sbToggle").addEventListener("click", () => document.body.classList.toggle("sb-open"));
+$("#threads").addEventListener("click", () => document.body.classList.remove("sb-open"));
+
 // Attach form: radio picks Local folder (server-side dir autocomplete) or URL (history autocomplete).
 const attachForm = $<HTMLFormElement>("#attach");
 const locInput = attachForm.elements.namedItem("location") as HTMLInputElement;

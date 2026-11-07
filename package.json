@@ -19,6 +19,8 @@
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
+    "dompurify": "3.2.6",
+    "marked": "15.0.12",
     "smol-toml": "^1.9.1",
     "ws": "^8.22.1"
   },
