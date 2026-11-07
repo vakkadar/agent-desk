@@ -15,6 +15,8 @@ export interface DeskConfig {
   };
   agent: string;
   mux: string;
+  /** Minutes before a pending approval auto-denies, per mode ([approval_timeout_min] in desk.toml). */
+  approvalTimeoutMin: Record<"ask" | "design" | "code", number>;
 }
 
 export const DEFAULTS: DeskConfig = {
@@ -24,6 +26,7 @@ export const DEFAULTS: DeskConfig = {
   network: { bind: ["127.0.0.1"], actionAllow: ["127.0.0.1", "::1"], readonlyAllow: [] },
   agent: "claude",
   mux: "herdr",
+  approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
 };
 
 /** Load desk.toml from the data dir; missing file → defaults. */
@@ -47,5 +50,6 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     },
     agent: raw.agent ?? DEFAULTS.agent,
     mux: raw.mux ?? DEFAULTS.mux,
+    approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
   };
 }

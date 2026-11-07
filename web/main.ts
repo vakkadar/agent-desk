@@ -131,6 +131,42 @@ function renderCards() {
       d.append(s, pre);
       card.append(d);
       answer = null;
+    } else if (ev.kind === "approval_request") {
+      const res = evs.find((x) => x.event.kind === "approval_result" && x.event.id === ev.id)?.event as any;
+      const ap = document.createElement("div");
+      ap.className = "approval";
+      const h = document.createElement("div");
+      h.className = "ap-head";
+      h.textContent = `Approval needed: ${ev.tool}`;
+      const pre = document.createElement("pre");
+      pre.textContent = JSON.stringify(ev.input, null, 2);
+      ap.append(h, pre);
+      if (res) {
+        ap.classList.add(res.decision === "allow" ? "ok" : "no");
+        const r = document.createElement("div");
+        r.className = "meta";
+        r.textContent = `${res.decision === "allow" ? "approved" : "denied"} (${res.by})`;
+        ap.append(r);
+      } else if (state.role === "action") {
+        const row = document.createElement("div");
+        row.className = "ap-btns";
+        for (const allow of [true, false]) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = allow ? "Approve" : "Deny";
+          b.className = allow ? "ap-ok" : "ap-no";
+          b.onclick = () => { row.querySelectorAll("button").forEach((x) => (x.disabled = true)); act({ type: "approve", id: ev.id, allow }); };
+          row.append(b);
+        }
+        ap.append(row);
+      } else {
+        const r = document.createElement("div");
+        r.className = "meta";
+        r.textContent = "waiting for approval (read-only view)";
+        ap.append(r);
+      }
+      card.append(ap);
+      answer = null;
     } else if (ev.kind === "usage" || ev.kind === "done") {
       const meta = document.createElement("div");
       meta.className = "meta";

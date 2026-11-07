@@ -8,6 +8,7 @@ export interface SessionRef {
   agent: string; // "claude" | "codex" | ...
   sessionId: string; // agent-native session id (used for --resume after reboot); "" until first turn of a fork
   forkFrom?: string; // parent session id; consumed on first send
+  started?: boolean; // a turn has run; next send must --resume (set by the adapter)
   cwd: string;
   pane?: PaneRef; // set when a mux owns the process
 }
@@ -23,7 +24,8 @@ export type AgentEvent =
   | { kind: "text"; text: string }
   | { kind: "tool_call"; id: string; name: string; input: unknown }
   | { kind: "tool_result"; id: string; output: string; isError?: boolean }
-  | { kind: "approval_request"; reqId: string; tool: string; detail: string }
+  | { kind: "approval_request"; id: string; tool: string; input: unknown }
+  | { kind: "approval_result"; id: string; decision: "allow" | "deny"; by: string }
   | { kind: "state"; state: AgentState }
   | { kind: "usage"; tokensIn: number; tokensOut: number; costUsd?: number }
   | { kind: "done"; outcome: "ok" | "error" | "cancelled"; error?: string };
@@ -53,7 +55,7 @@ export interface AgentAdapter {
   start(opts: StartOpts): Promise<SessionRef>;
   resume(ref: SessionRef): Promise<SessionRef>;
   fork(ref: SessionRef, name: string): Promise<SessionRef>;
-  send(ref: SessionRef, text: string): AsyncIterable<AgentEvent>;
+  send(ref: SessionRef, text: string, ctx?: { sourceId: string; threadId: string }): AsyncIterable<AgentEvent>;
   approve(ref: SessionRef, reqId: string, allow: boolean): Promise<void>;
 }
 

@@ -11,12 +11,20 @@ import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
 import type { Mode, Role } from "./types.js";
+import { randomUUID } from "node:crypto";
+import { Approvals } from "./approvals.js";
+import { handleMcp } from "./mcp/permission.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
-const agent = new ClaudeAgent({ permissionMode: process.env.AGENT_DESK_PERMISSION_MODE });
+const mcpSecret = randomUUID();
+const approvals = new Approvals(bus, (t) => (cfg.approvalTimeoutMin[t.split("-")[0] as "ask"] ?? 30) * 60_000);
+const agent = new ClaudeAgent({
+  permissionMode: process.env.AGENT_DESK_PERMISSION_MODE,
+  approvalBase: `http://127.0.0.1:${cfg.port}/mcp/${mcpSecret}`,
+});
 await bus.init();
 await store.load();
 
@@ -28,6 +36,7 @@ const http = createServer(async (req, res) => {
     res.writeHead(403).end();
     return;
   }
+  if (handleMcp(req, res, mcpSecret, approvals)) return;
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, uptime: process.uptime(), sources: store.list().length }));
@@ -157,13 +166,18 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       const text = `${cfg.keyword}[${th.id}]: ${m.text}`; // FR-12
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
-        for await (const ev of agent.send(th.session, text)) {
+        for await (const ev of agent.send(th.session, text, { sourceId: rec.id, threadId: th.id })) {
           bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
         }
       } finally {
         busy.delete(key);
         await store.save(rec); // persists session id assigned on fork
       }
+      return;
+    }
+    case "approve": {
+      // Role gate: handleAction is only reachable for action-role connections.
+      if (!approvals.resolve(String(m.id), m.allow === true, "browser")) throw new Error("approval already resolved or unknown");
       return;
     }
     default:

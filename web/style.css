@@ -133,3 +133,13 @@ form#prompt textarea { resize: vertical; min-height: 44px; max-height: 40dvh; }
   #cards { padding: 16px; }
   form#prompt { padding: 10px 16px 12px; }
 }
+
+/* Approval cards (FR-14) */
+.approval { border: 1px solid var(--warn); background: var(--sunk); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.approval.ok { border-color: var(--ok); }
+.approval.no { border-color: var(--line-strong); opacity: 0.8; }
+.approval .ap-head { font-weight: 600; margin-bottom: 4px; }
+.approval pre { margin: 4px 0; max-height: 200px; overflow: auto; }
+.approval .ap-btns { display: flex; gap: 8px; margin-top: 6px; }
+.approval .ap-ok { background: var(--ok); border-color: var(--ok); color: var(--acc-fg); }
+.approval .ap-no { border-color: var(--warn); color: var(--warn); }
