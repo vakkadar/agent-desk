@@ -2,6 +2,8 @@
 let send: (m: unknown) => void = () => {};
 let btn: HTMLButtonElement;
 let on = false;
+let regError = ""; // why sw.js failed to register, shown when the toggle is tapped
+let keyTimer: ReturnType<typeof setTimeout> | undefined;
 
 const supported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
@@ -24,26 +26,46 @@ export async function initPush(button: HTMLButtonElement, wsSend: (m: unknown) =
   try {
     const reg = await navigator.serviceWorker.register("./sw.js");
     on = !!(await reg.pushManager.getSubscription()) && Notification.permission === "granted";
-  } catch { /* leave off */ }
+  } catch (e: any) {
+    regError = String(e?.message ?? e);
+  }
   show();
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`${what} timed out`)), ms))]);
 }
 
 export async function togglePush() {
   if (!supported()) return alert("Add to Home Screen to get alerts (iPhone: Share, then Add to Home Screen).");
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  if (sub) {
-    send({ type: "push_unsubscribe", endpoint: sub.endpoint });
-    await sub.unsubscribe();
-    on = false;
-    return show();
+  // iOS grants permission only when asked straight from the tap, so ask before any await.
+  const perm = on ? null : Notification.requestPermission();
+  btn.textContent = "🔔 Alerts: …";
+  try {
+    const reg = await withTimeout(navigator.serviceWorker.ready, 10_000, `service worker${regError ? ` (${regError})` : ""}`);
+    const sub = await reg.pushManager.getSubscription();
+    if (on && sub) {
+      send({ type: "push_unsubscribe", endpoint: sub.endpoint });
+      await sub.unsubscribe();
+      on = false;
+      return show();
+    }
+    if ((await (perm ?? Notification.requestPermission())) !== "granted") {
+      show();
+      return alert("Notifications are blocked for this app.");
+    }
+    clearTimeout(keyTimer);
+    keyTimer = setTimeout(() => { show(); alert("Alerts failed: no reply from the desk (read-only connection?)"); }, 10_000);
+    send({ type: "push_key" }); // reply arrives in onPushKey
+  } catch (e: any) {
+    show();
+    alert(`Alerts failed: ${e?.message ?? e}`);
   }
-  if ((await Notification.requestPermission()) !== "granted") return alert("Notifications are blocked for this app.");
-  send({ type: "push_key" }); // reply arrives in onPushKey
 }
 
 /** Server sent its VAPID public key: finish subscribing. */
 export async function onPushKey(key: string) {
+  clearTimeout(keyTimer);
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
