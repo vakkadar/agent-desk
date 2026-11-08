@@ -252,23 +252,27 @@ function renderCards() {
       h.className = "ap-head";
       h.textContent = `Approval needed: ${ev.tool}`;
       const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(ev.input, null, 2);
+      pre.textContent = typeof ev.input === "string" ? ev.input : JSON.stringify(ev.input, null, 2);
       ap.append(h, pre);
       if (res) {
         ap.classList.add(res.decision === "allow" ? "ok" : "no");
         const r = document.createElement("div");
         r.className = "meta";
-        r.textContent = `${res.decision === "allow" ? "approved" : "denied"} (${res.by})`;
+        r.textContent = res.by === "terminal" ? "answered in the terminal" : `${res.decision === "allow" ? "approved" : "denied"} (${res.by})`;
         ap.append(r);
       } else if (state.role === "action") {
         const row = document.createElement("div");
         row.className = "ap-btns";
-        for (const allow of [true, false]) {
+        row.style.flexWrap = "wrap";
+        // A live window's own prompt brings its options (answered by key); the desk's own approvals are Approve/Deny.
+        const choices = ev.options?.map((o) => ({ allow: o.allow, label: o.label, msg: { type: "live_answer", sourceId: state.source, threadId: state.thread, id: ev.id, key: o.key } }))
+          ?? [true, false].map((allow) => ({ allow, label: allow ? "Approve" : "Deny", msg: { type: "approve", id: ev.id, allow } }));
+        for (const { allow, label, msg } of choices) {
           const b = document.createElement("button");
           b.type = "button";
-          b.textContent = allow ? "Approve" : "Deny";
+          b.textContent = label;
           b.className = allow ? "ap-ok" : "ap-no";
-          b.onclick = () => { row.querySelectorAll("button").forEach((x) => (x.disabled = true)); act({ type: "approve", id: ev.id, allow }); };
+          b.onclick = () => { row.querySelectorAll("button").forEach((x) => (x.disabled = true)); act(msg); };
           row.append(b);
         }
         ap.append(row);

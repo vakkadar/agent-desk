@@ -27,6 +27,7 @@ import { handleMcp } from "./mcp/permission.js";
 import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
 import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
 import { contextUsed } from "./context.js";
+import { LiveFollower } from "./live-follow.js";
 import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
@@ -164,6 +165,14 @@ http.on("upgrade", async (req, sock, head) => {
 
 const busy = new Map<string, AbortController>(); // "source/thread" with a running turn
 const helloed = new Set<(m: unknown) => void>(); // senders of clients past "hello"
+// Show what happens in the user's Claude windows even when typed in the terminal (only while a browser is open).
+if (cfg.liveSessions.length)
+  new LiveFollower(
+    liveClaude,
+    () => store.list().filter((r) => r.id !== GENERAL_ID && r.kind !== "url"),
+    (sourceId, event) => bus.publish({ sourceId, threadId: "ask", event }),
+    (id) => helloed.size > 0 && !busy.has(`${id}/ask`),
+  ).start();
 const broadcastSources = () => { for (const s of helloed) s({ type: "sources", sources: store.list() }); };
 
 function onClient(ws: WebSocket, req: IncomingMessage) {
@@ -334,6 +343,13 @@ async function handleAction(m: any, send: (m: unknown) => void) {
     case "push_unsubscribe":
       await push.unsubscribe(String(m.endpoint));
       return;
+    case "live_answer": {
+      // Answer the permission prompt of a live Claude window; LiveClaude re-checks the window first.
+      const rec = need(store.get(m.sourceId), "source");
+      const opt = await liveClaude.answer(String(m.id), String(m.key));
+      bus.publish({ sourceId: rec.id, threadId: String(m.threadId), event: { kind: "approval_result", id: String(m.id), decision: opt.allow ? "allow" : "deny", by: "browser" } });
+      return;
+    }
     default:
       throw new Error(`unknown message ${m.type}`);
   }
