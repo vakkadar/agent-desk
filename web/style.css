@@ -276,3 +276,11 @@ form#prompt { position: relative; }
 #actMenu span { color: var(--mute); font-size: 12px; }
 #ctxHint { flex-basis: 100%; font-size: 13px; color: var(--warn); }
 #ctxHint button { margin-left: 6px; }
+
+/* attachments */
+#attachBtn { flex: none; }
+#attachBar { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+#attachBar .chip { border: 1px solid var(--line); border-radius: 12px; padding: 2px 4px 2px 10px; }
+#attachBar .chip button { background: none; border: 0; padding: 0 6px; cursor: pointer; color: inherit; }
+.atts { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.atts img { max-height: 120px; max-width: 160px; border-radius: 6px; border: 1px solid var(--line); display: block; }

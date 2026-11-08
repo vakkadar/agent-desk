@@ -4,6 +4,7 @@ import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
+import { initAttach, takePrefill, splitAttached, attachedEl } from "./attach.js";
 import { initNotes, showNotes, renderNotes } from "./notes.js";
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -52,6 +53,8 @@ function onMsg(m: any) {
     state.role = m.role;
     state.sources = m.sources;
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
+    const pf = takePrefill(); // shared text/link: prefill the composer, never auto-send
+    if (pf) { state.source = state.sources.some((s) => s.id === pf.source) ? pf.source! : GENERAL; state.mode = "ask"; state.thread = "ask"; }
     if (isGeneral()) state.mode = "ask";
     if (!$("main").classList.contains("paneled") && state.mode !== "notes") syncTabs();
     alertStatus(m.role === "action" ? "connected" : "read-only · tap to sign in", m.role === "action" ? "ok" : "");
@@ -59,6 +62,7 @@ function onMsg(m: any) {
   } else if (m.type === "sources") {
     state.sources = m.sources;
     renderSources();
+    if (pf) { const t = $<HTMLTextAreaElement>("#prompt textarea"); t.value = pf.text; t.focus(); }
   } else if (m.type === "event") {
     const e: Ev = m.e;
     if (state.events.some((x) => x.seq === e.seq)) return;
@@ -198,8 +202,10 @@ function renderCards() {
       card.className = "card";
       const q = document.createElement("div");
       q.className = "q";
-      q.textContent = ev.kind === "prompt" ? ev.text : "(continued)";
+      const sp = ev.kind === "prompt" ? splitAttached(ev.text, state.source) : null;
+      q.textContent = sp ? sp.text : "(continued)";
       card.append(q);
+      if (sp?.files.length) card.append(attachedEl(sp.files));
       answer = null;
       steps = null;
       nSteps = 0;
@@ -341,11 +347,11 @@ function showCtx(c: { used: number; limit: number } | null, running: boolean) {
   el.append(b);
 }
 
-function sendText(text: string) {
+function sendText(text: string, attachments: string[] = []) {
   if (!state.source || (!state.thread && !isGeneral())) return alertStatus("pick a source and thread");
   $("#promptErr").hidden = true;
   lastSent = { text, at: Date.now() };
-  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text });
+  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments });
 }
 
 // ⋯ menu next to Send: Claude commands and the prefixes this box understands.
@@ -635,11 +641,18 @@ function renderResume(list: ClaudeSession[]) {
 }
 const promptForm = $<HTMLFormElement>("#prompt");
 let lastSent: { text: string; at: number } | null = null;
+const attach = initAttach(promptForm, {
+  source: () => state.source,
+  token: () => token(),
+  error: (msg) => { const e = $("#promptErr"); e.textContent = msg; e.hidden = false; },
+});
 promptForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const ta = promptForm.elements.namedItem("text") as HTMLTextAreaElement;
   if (!state.source || (!state.thread && !isGeneral()) || !ta.value.trim()) return alertStatus("pick a source and thread");
-  sendText(ta.value);
+  const files = attach.take();
+  if (!files) return;
+  sendText(ta.value, files);
   ta.value = "";
 });
 promptForm.addEventListener("keydown", (e) => {
