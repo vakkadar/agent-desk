@@ -67,6 +67,7 @@ function act(type: Act, name: string, extra: Record<string, unknown> = {}) {
 /** "attach: <name>" typed in the box. */
 export function attachByName(name: string) {
   showHSessions();
+  if (!canAct()) return; // the dialog explains read-only
   pending = name;
   // The list may not be loaded yet: ask the server directly; a PIN error comes back through onHSessionError.
   send({ type: "hsession_open", name, pin: pinFor(name) });
@@ -91,7 +92,7 @@ const when = (iso?: string) => (iso ? new Date(iso).toLocaleString([], { dateSty
 export function renderHSessions(list: any[]) {
   rows = list;
   if (!rows.length) return void (body.textContent = "No sessions. Create one on the host: agent-desk-session create <name> [folder] --pin");
-  body.replaceChildren(...rows.map((r) => {
+  const items = rows.map((r) => {
     const d = document.createElement("div");
     d.className = "srow";
     const t = document.createElement("span");
@@ -116,7 +117,15 @@ export function renderHSessions(list: any[]) {
     p.onclick = () => act("hsession_persist", r.name, { on: !r.persistent });
     d.append(t, p, b);
     return d;
-  }));
+  });
+  if (!canAct()) {
+    // Read-only connection (no desk token in this browser): buttons stay off; say why.
+    const n = document.createElement("p");
+    n.className = "hsNote";
+    n.textContent = "Read-only in this browser: tap the read-only pill at the top and paste the desk token, then Open works.";
+    items.unshift(n);
+  }
+  body.replaceChildren(...items);
 }
 
 /** After Open: Claude is asking whether to trust the folder (first time there). */

@@ -294,3 +294,4 @@ form#prompt { position: relative; }
 #hsPin[hidden] { display: none; }
 #hsPin .row { display: flex; gap: 8px; }
 #hsPin input { flex: 1; min-width: 0; }
+#hsessions .hsNote { margin: 0 0 8px; font-size: 0.9em; opacity: 0.85; }
