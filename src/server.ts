@@ -88,7 +88,7 @@ deskGit.onCommit = (hash, msg) => notes.record("commit", `${hash} ${msg}`);
 notes.attach(bus);
 
 const webRoot = fileURLToPath(new URL("./web/", import.meta.url));
-const MIME: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" };
+const MIME: Record<string, string> = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 
 const http = createServer(async (req, res) => {
   if (!(await admitted(req))) {

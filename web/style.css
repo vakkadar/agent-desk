@@ -76,6 +76,13 @@ nav#tabs button:disabled { opacity: 0.45; cursor: default; }
   border: 1px solid var(--line); border-radius: 999px;
 }
 #status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--mute); }
+#status:not(.ok) { cursor: pointer; }
+#tokenForm { display: flex; gap: 6px; }
+#tokenForm input { width: 180px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--sunk); }
+#tokenForm button { padding: 4px 10px; border: 0; border-radius: 6px; background: var(--acc); color: var(--acc-fg); }
+/* iPhone home-screen app: keep clear of the notch and home bar; 16px inputs stop zoom-on-focus. */
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+@media (max-width: 720px) { input, textarea, select { font-size: 16px; } }
 #status.ok::before { background: var(--ok); }
 #status.warn::before { background: var(--warn); }
 #theme { padding: 4px 10px; font-size: 12.5px; color: var(--mute); border-radius: 999px; }

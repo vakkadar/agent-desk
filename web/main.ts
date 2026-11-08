@@ -54,7 +54,7 @@ function onMsg(m: any) {
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
     if (isGeneral()) state.mode = "ask";
     if (!$("main").classList.contains("paneled") && state.mode !== "notes") syncTabs();
-    alertStatus(m.role === "action" ? "connected" : "read-only", m.role === "action" ? "ok" : "");
+    alertStatus(m.role === "action" ? "connected" : "read-only · tap to sign in", m.role === "action" ? "ok" : "");
     renderSources();
   } else if (m.type === "sources") {
     state.sources = m.sources;
@@ -373,6 +373,25 @@ function alertStatus(t: string, cls = "") {
   s.textContent = t;
   s.className = cls;
 }
+
+// Read-only → tap the status to paste the desk token. Needed on iPhone: an app added to
+// the home screen keeps its own storage, so a token saved in Safari isn't there.
+$("#status").addEventListener("click", () => {
+  if (state.role === "action" || $("#tokenForm")) return;
+  const f = document.createElement("form");
+  f.id = "tokenForm";
+  f.innerHTML = `<input type="password" autocomplete="off" placeholder="desk token" aria-label="Desk token" /><button type="submit">Sign in</button>`;
+  f.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = f.querySelector("input")!.value.trim();
+    if (!v) return;
+    localStorageSet("token", v);
+    location.hash = "";
+    location.reload();
+  });
+  $("#status").after(f);
+  f.querySelector("input")!.focus();
+});
 
 // Theme: auto (follow OS) → light → dark. Head script applies the saved choice before paint.
 const THEMES = ["auto", "light", "dark"];
