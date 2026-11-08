@@ -26,14 +26,15 @@
     <button id="sbToggle" type="button" aria-label="Toggle sidebar">&#9776;</button>
     <div class="brand"><span class="dot"></span>agent-desk</div>
     <nav id="tabs">
-      <button data-mode="general">General</button>
       <button data-mode="ask" class="on">Ask</button>
-      <button data-mode="design">Design</button>
-      <button data-mode="code">Code</button>
+      <button data-mode="general">General</button>
       <button data-mode="notes">Notes</button>
-      <button data-mode="usage">Usage</button>
       <button data-mode="search" title="Search past prompts, answers and tool output">History</button>
       <button data-mode="web" title="Search the web in a new browser tab">Web</button>
+      <button id="settingsTab" type="button" aria-expanded="false" title="Design, Code, Usage">Settings ▸</button>
+      <button data-mode="design" class="more" hidden>Design</button>
+      <button data-mode="code" class="more" hidden>Code</button>
+      <button data-mode="usage" class="more" hidden>Usage</button>
     </nav>
     <span id="status">offline</span>
     <button id="termBtn" type="button" title="Terminal (live herdr session). Hold Shift to select text when an app captures the mouse. Copy: select, or Ctrl+Shift+C; paste: Ctrl+Shift+V or right-click.">&gt;_ Terminal</button>

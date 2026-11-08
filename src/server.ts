@@ -240,7 +240,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
     if (m.type === "hello") {
       role = roleOf(req, m.token);
       if (!role) return ws.close(4003, "forbidden");
-      send({ type: "welcome", role, keyword: cfg.keyword, sources: store.list() });
+      send({ type: "welcome", role, keyword: cfg.keyword, hubUrl: cfg.hubUrl, sources: store.list() });
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
       unsub();
       unsub = bus.subscribe((e) => send({ type: "event", e }));
@@ -398,6 +398,13 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       broadcastSources();
       return;
     }
+    case "hub_answer": {
+      // The browser's reply from the hub for a turn hubTurn is waiting on.
+      const done = hubWait.get(`${m.sourceId}/${m.threadId}`);
+      if (!done) throw new Error("no hub turn waiting in that thread");
+      done({ text: m.text == null ? undefined : String(m.text), error: m.error == null ? undefined : String(m.error), model: m.model == null ? undefined : String(m.model) });
+      return;
+    }
     case "cancel": {
       // Stop a running turn: kill the agent process, deny its open approvals.
       const ac = busy.get(`${m.sourceId}/${m.threadId}`);
@@ -469,6 +476,7 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
     hsessions.verify(bound.name, m.pin);
     if (bound.state !== "open") throw new Error(`session ${bound.name} is ${bound.state}; open it from Sessions (⋯ menu)`);
   }
+  if (m.hub) return hubTurn(rec, th, m, send);
   if (rec.id !== GENERAL_ID && th.id === "ask" && !opts.noLive && (cfg.liveSessions.length || bound)) {
     const raw = String(m.text ?? "");
     const nw = /^\s*new:[ \t]*/i.exec(raw);
@@ -513,6 +521,41 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
   } finally {
     busy.delete(key);
     await store.save(rec); // persists session id assigned on fork
+  }
+}
+
+// Ask run on the hub. The browser holds the hub sign-in, so it makes the call; the desk
+// records the turn in the thread (prompt, answer, done) like any other, and holds the
+// thread busy until the browser reports back (hub_answer) or the wait runs out.
+const HUB_WAIT_MS = 330_000; // hub's own runtime budget is 300 s
+type HubReply = { text?: string; error?: string; model?: string };
+const hubWait = new Map<string, (r: HubReply) => void>();
+
+async function hubTurn(rec: SourceRec, th: { id: string }, m: any, send: (m: unknown) => void) {
+  if (!cfg.hubUrl) throw new Error("no hub configured ([hub] url in desk.toml)");
+  const text = String(m.text ?? "").trim();
+  if (!text) throw new Error("empty message");
+  const agentId = String(m.hub.agent || "expert").slice(0, 60);
+  const model = String(m.hub.model || "").slice(0, 120);
+  const key = `${rec.id}/${th.id}`;
+  if (busy.has(key)) throw new Error("thread busy");
+  const ac = new AbortController();
+  busy.set(key, ac);
+  bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text: `hub:${agentId}${model ? ` ${model}` : ""}[${th.id}]: ${text}` } });
+  try {
+    const r = await new Promise<HubReply>((res) => {
+      hubWait.set(key, res);
+      ac.signal.addEventListener("abort", () => res({ error: "cancelled" }));
+      setTimeout(() => res({ error: "the hub did not answer in time" }), HUB_WAIT_MS);
+      send({ type: "hub_go", sourceId: rec.id, threadId: th.id, text, agent: agentId, model });
+    });
+    if (r.text) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: r.model ? `${r.text}\n\n_— hub · ${agentId} · ${r.model}_` : r.text } });
+    const outcome = r.error === "cancelled" ? "cancelled" : r.error ? "error" : "ok";
+    bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "done", outcome, ...(r.error && outcome === "error" ? { error: `hub: ${r.error}` } : {}) } });
+  } finally {
+    hubWait.delete(key);
+    busy.delete(key);
+    await store.save(rec);
   }
 }
 

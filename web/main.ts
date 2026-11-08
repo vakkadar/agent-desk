@@ -2,6 +2,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSchedules, showSchedules, renderSchedules } from "./schedule.js";
+import { initHub, setHubUrl, hubChoice, onHubGo } from "./hub.js";
 import { initHSessions, showHSessions, renderHSessions, attachByName, onHSessionError, pinFor, onTrustNeeded } from "./hsessions.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
@@ -55,6 +56,7 @@ function onMsg(m: any) {
   if (m.type === "welcome") {
     state.role = m.role;
     state.sources = m.sources;
+    setHubUrl(m.hubUrl);
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
     openHash(location.hash);
     const pf = takePrefill(); // shared text/link: prefill the composer, never auto-send
@@ -63,6 +65,8 @@ function onMsg(m: any) {
     if (!$("main").classList.contains("paneled") && state.mode !== "notes") syncTabs();
     alertStatus(m.role === "action" ? "connected" : "read-only · tap to sign in", m.role === "action" ? "ok" : "");
     renderSources();
+  } else if (m.type === "hub_go") {
+    void onHubGo(m, state.events);
   } else if (m.type === "push_key") {
     onPushKey(m.key);
   } else if (m.type === "sources") {
@@ -369,7 +373,7 @@ function sendText(text: string, attachments: string[] = []) {
   $("#promptErr").hidden = true;
   lastSent = { text, at: Date.now() };
   const hs = state.sources.find((s) => s.id === state.source)?.herdrSession;
-  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined });
+  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined, hub: hubChoice(text) });
 }
 
 // ⋯ menu next to Send: Claude commands and the prefixes this box understands.
@@ -417,6 +421,7 @@ function toolGist(input: any): string {
 
 initSchedules((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
 initHSessions((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
+initHub((m) => state.ws?.send(JSON.stringify(m)), $("#prompt"));
 
 function act(m: unknown) {
   if (state.role !== "action") return alertStatus("read-only");
@@ -482,9 +487,19 @@ themeBtn.addEventListener("click", () => {
 applyTheme();
 
 initNotes((m) => state.ws?.send(JSON.stringify(m)));
+// Settings tab: shows or hides Design, Code and Usage (kept out of the main row).
+function showMore(on: boolean) {
+  document.querySelectorAll<HTMLElement>("#tabs .more").forEach((x) => (x.hidden = !on));
+  const s = $("#settingsTab");
+  s.setAttribute("aria-expanded", String(on));
+  s.textContent = on ? "Settings ▾" : "Settings ▸";
+  localStorageSet("settingsOpen", on ? "1" : "");
+}
+showMore(localStorageGet("settingsOpen") === "1");
 $("#tabs").addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button");
   if (!b || b.disabled) return;
+  if (b.id === "settingsTab") return showMore($("#settingsTab").getAttribute("aria-expanded") !== "true");
   document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
   if (b.dataset.mode === "general") {
     showPanel("");

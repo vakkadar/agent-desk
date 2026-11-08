@@ -295,3 +295,7 @@ form#prompt { position: relative; }
 #hsPin .row { display: flex; gap: 8px; }
 #hsPin input { flex: 1; min-width: 0; }
 #hsessions .hsNote { margin: 0 0 8px; font-size: 0.9em; opacity: 0.85; }
+#runOn { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--mute); }
+#runOn[hidden], #runOn [hidden] { display: none; }
+#runOn select { max-width: 14em; }
+#runOn .hubNote { color: var(--warn); white-space: pre-line; }
