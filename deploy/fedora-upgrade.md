@@ -29,10 +29,13 @@ distupgrade repository`: Node packages left over from an older release. Fedora 4
 them `nodejs22` / `nodejs24`; switch to `nodejs22` (what the desk host runs), then retry:
 
 ```
-sudo dnf remove nodejs-docs nodejs-full-i18n
-sudo dnf install --allowerasing nodejs22 nodejs22-npm nodejs22-bin
+sudo dnf remove nodejs nodejs-libs nodejs-npm nodejs-docs nodejs-full-i18n
+sudo dnf install nodejs22 nodejs22-npm nodejs22-bin
 node -v   # v22.x
 ```
+
+Remove the old packages first: installing `nodejs22` over them fails with a file conflict on
+`/usr/lib64/libnode.so.*` (`--allowerasing` doesn't resolve file conflicts).
 
 ## 3. Install and reboot
 
