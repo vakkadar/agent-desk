@@ -8,6 +8,7 @@ export interface CfAccessOpts {
   team: string; // <team>.cloudflareaccess.com
   aud: string; // Access application AUD tag
   emails?: string[]; // optional extra allowlist on top of the Access policy
+  owners?: string[]; // verified Access emails that get full (action) access without the desk token
 }
 
 type Jwk = { kid: string } & Record<string, unknown>;
@@ -21,9 +22,11 @@ export class CfAccess {
   private keys = new Map<string, KeyObject>();
   private fetchedAt = 0;
   private emails: string[];
+  private owners: string[];
 
   constructor(private o: CfAccessOpts, private certs: () => Promise<Jwk[]> = () => fetchCerts(o.team)) {
     this.emails = (o.emails ?? []).map((e) => e.toLowerCase());
+    this.owners = (o.owners ?? []).map((e) => e.toLowerCase());
   }
 
   private get issuer() {
@@ -38,6 +41,11 @@ export class CfAccess {
       this.fetchedAt = Date.now();
     }
     return this.keys.get(kid);
+  }
+
+  /** A verified identity from verify() that is one of the owners. */
+  isOwner(identity: string | null): boolean {
+    return !!identity && this.owners.includes(identity);
   }
 
   /** Verified identity (email, or "service-token"), or null if the request isn't authorized. */

@@ -51,3 +51,14 @@ test("tunnel detection and role: Access alone is read-only", () => {
   assert.equal(g.tunnelRole("s3cret"), "action");
   assert.equal(g.tunnelRole("nope"), "readonly");
 });
+
+test("cfaccess: owners are matched on the verified email only", async () => {
+  const cf = new CfAccess({ team, aud, owners: ["ME@x.com"] }, async () => [jwk]);
+  const me = await cf.verify(req({ "cf-access-jwt-assertion": jwt(good()) }));
+  assert.ok(cf.isOwner(me));
+  const guest = await cf.verify(req({ "cf-access-jwt-assertion": jwt({ ...good(), email: "guest@x.com" }) }));
+  assert.equal(guest, "guest@x.com");
+  assert.ok(!cf.isOwner(guest));
+  assert.ok(!cf.isOwner(await cf.verify(req({ "cf-access-jwt-assertion": "forged.a.b" }))));
+  assert.ok(!new CfAccess({ team, aud }, async () => [jwk]).isOwner(me));
+});

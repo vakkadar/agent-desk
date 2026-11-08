@@ -38,10 +38,24 @@ const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
 const cfAccess = cfg.network.cfAccess ? new CfAccess(cfg.network.cfAccess) : null;
 
+// Tunnel requests whose Access login is one of the owners (full access without the desk token).
+const ownerReqs = new WeakSet<IncomingMessage>();
+
 /** Admission for HTTP and WS upgrade. Tunnel traffic needs a valid Access JWT; fails closed if Access isn't configured. */
 async function admitted(req: IncomingMessage): Promise<boolean> {
-  if (viaTunnel(req)) return !!cfAccess && (await cfAccess.verify(req)) !== null;
+  if (viaTunnel(req)) {
+    if (!cfAccess) return false;
+    const who = await cfAccess.verify(req);
+    if (cfAccess.isOwner(who)) ownerReqs.add(req);
+    return who !== null;
+  }
   return guard.roleFor(req.socket.remoteAddress ?? "") !== null;
+}
+
+/** Role for a request (after admitted()). Over the tunnel: owners get action, others need the token. */
+function roleOf(req: IncomingMessage, token?: string) {
+  if (viaTunnel(req)) return ownerReqs.has(req) ? "action" : guard.tunnelRole(token);
+  return guard.roleFor(req.socket.remoteAddress ?? "", token);
 }
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
@@ -118,7 +132,7 @@ const http = createServer(async (req, res) => {
   }
   if (!viaTunnel(req) && handleMcp(req, res, mcpSecret, approvals)) return;
   if (handleUploadHttp(req, res, {
-    role: (r, token) => (viaTunnel(r) ? guard.tunnelRole(token) : guard.roleFor(r.socket.remoteAddress ?? "", token)),
+    role: (r, token) => roleOf(r, token),
     sameOrigin,
     folder: (id) => store.get(id)?.location,
   })) return;
@@ -166,7 +180,7 @@ http.on("upgrade", async (req, sock, head) => {
   }
   if ((req.url ?? "").split("?")[0] === "/pty") {
     ptyWss.handleUpgrade(req, sock, head, (ws) =>
-      onPtyClient(ws, req, { resolveRole: (token) => (viaTunnel(req) ? guard.tunnelRole(token) : guard.roleFor(req.socket.remoteAddress ?? "", token)) }));
+      onPtyClient(ws, req, { resolveRole: (token) => roleOf(req, token) }));
     return;
   }
   wss.handleUpgrade(req, sock, head, (ws) => onClient(ws, req));
@@ -224,7 +238,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       return;
     }
     if (m.type === "hello") {
-      role = viaTunnel(req) ? guard.tunnelRole(m.token) : guard.roleFor(ip, m.token);
+      role = roleOf(req, m.token);
       if (!role) return ws.close(4003, "forbidden");
       send({ type: "welcome", role, keyword: cfg.keyword, sources: store.list() });
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });

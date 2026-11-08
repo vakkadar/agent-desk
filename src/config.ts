@@ -73,7 +73,7 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
       readonlyAllow: net.readonly_allow ?? DEFAULTS.network.readonlyAllow,
       actionToken: process.env.AGENT_DESK_TOKEN ?? net.action_token,
       cfAccess: net.cloudflare_access
-        ? { team: net.cloudflare_access.team, aud: net.cloudflare_access.aud, emails: net.cloudflare_access.emails }
+        ? { team: net.cloudflare_access.team, aud: net.cloudflare_access.aud, emails: net.cloudflare_access.emails, owners: net.cloudflare_access.owners }
         : undefined,
     },
     agent: raw.agent ?? DEFAULTS.agent,
