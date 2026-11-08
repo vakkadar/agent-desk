@@ -24,6 +24,16 @@ skip it for the upgrade:
 sudo dnf system-upgrade download --releasever=45 -y --disablerepo=docker-ce-stable
 ```
 
+If it fails with `nodejs-docs ... requires nodejs = ...fc43` / `does not belong to a
+distupgrade repository`: Node packages left over from an older release. Fedora 44+ names
+them `nodejs22` / `nodejs24`; switch to `nodejs22` (what the desk host runs), then retry:
+
+```
+sudo dnf remove nodejs-docs nodejs-full-i18n
+sudo dnf install --allowerasing nodejs22 nodejs22-npm nodejs22-bin
+node -v   # v22.x
+```
+
 ## 3. Install and reboot
 
 ```
