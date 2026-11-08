@@ -2,7 +2,7 @@
 // `agent-desk doctor`: host readiness checks (RH-6). Pluggable via registerCheck().
 import { execFile } from "node:child_process";
 import { statfs } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { loadConfig, type DeskConfig } from "./config.js";
 
@@ -179,6 +179,23 @@ export async function runDoctor(cfg?: DeskConfig, log: (s: string) => void = con
   return fails ? 1 : 0;
 }
 
+// The service gets its env from ~/.config/agent-desk/env (systemd EnvironmentFile). Doctor run by hand
+// from a shell doesn't, so load the same file. Vars already set in the shell win.
+export function loadEnvFile(path: string, env: NodeJS.ProcessEnv = process.env): void {
+  let text: string;
+  try { text = readFileSync(path, "utf8"); } catch { return; }
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!m || env[m[1]] !== undefined) continue;
+    let v = m[2];
+    if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v.at(-1) === v[0]) v = v.slice(1, -1);
+    env[m[1]] = v;
+  }
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
+  loadEnvFile(`${process.env.HOME}/.config/agent-desk/env`);
   process.exit(await runDoctor());
 }
