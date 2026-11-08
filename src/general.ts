@@ -114,6 +114,17 @@ function add(rec: SourceRec, session: SessionRef, title: string): ThreadRec {
 export async function ensureGeneralHerdr(dataDir: string, cwd: string, bin = "herdr", claude = "claude"): Promise<string> {
   const mux = new HerdrMux("general", join(dataDir, ".index", "general-panes.json"), bin);
   const p = await mux.ensurePane(`claude:${cwd}`, cwd); // new folder → new pane
-  if (p.fresh) await mux.cli(["pane", "run", p.id, claude]);
+  // Start Claude in a new pane, and again if it exited (quit, expired login, crash).
+  const running = p.fresh ? false : await claudeIn(mux, p.id);
+  if (!running) await mux.cli(["pane", "run", p.id, claude]);
   return p.id;
+}
+
+async function claudeIn(mux: HerdrMux, paneId: string): Promise<boolean> {
+  try {
+    const r: any = await mux.cli(["agent", "list"]);
+    return (r?.result?.agents ?? []).some((a: any) => a.pane_id === paneId && a.agent === "claude");
+  } catch {
+    return true; // can't tell: don't type into the pane
+  }
 }

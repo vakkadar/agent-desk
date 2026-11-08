@@ -60,7 +60,12 @@ registerHealth("mux", async () => {
 await bus.init();
 await store.load();
 await ensureGeneral(store, agent, cfg.generalDir);
-if (mux.herdr) ensureGeneralHerdr(cfg.dataDir, cfg.generalDir).catch((e) => console.warn("[general] herdr session:", e.message));
+if (mux.herdr) {
+  // Keep an interactive Claude open in the General herdr session; restart it if it exits.
+  const keepGeneral = () => ensureGeneralHerdr(cfg.dataDir, cfg.generalDir).catch((e) => console.warn("[general] herdr session:", e.message));
+  keepGeneral();
+  setInterval(keepGeneral, 5 * 60_000).unref();
+}
 await recoverInto(
   mux,
   cfg.dataDir,
