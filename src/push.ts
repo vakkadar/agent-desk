@@ -50,7 +50,8 @@ export class Push {
   private vapidFile: string;
   private subsFile: string;
 
-  constructor(dataDir: string, private subject = "mailto:agent-desk@localhost") {
+  // Apple rejects a VAPID subject on a localhost domain (403 BadJwtToken), so use a real-looking one.
+  constructor(dataDir: string, private subject = "mailto:agent-desk@example.com") {
     this.vapidFile = join(dataDir, ".index", "vapid.json");
     this.subsFile = join(dataDir, ".index", "push-subs.json");
   }
@@ -98,6 +99,7 @@ export class Push {
     await Promise.all(this.subs.map((s) =>
       webpush.sendNotification(s, body, { vapidDetails: { subject: this.subject, ...this.vapid }, TTL: 3600 }).catch((err) => {
         if (err?.statusCode === 404 || err?.statusCode === 410) dead.add(s.endpoint);
+        else console.error(`[push] send to ${new URL(s.endpoint).host} failed: ${err?.statusCode ?? ""} ${err?.body ?? err?.message ?? err}`);
       }),
     ));
     if (dead.size) {
