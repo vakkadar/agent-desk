@@ -19,9 +19,16 @@ command -v claude >/dev/null || { echo "claude not on PATH" >&2; exit 1; }
 echo "== 1/3  claude setup-token (open the URL it shows, approve, paste the code back)"
 claude setup-token
 echo
-read -rsp "== 2/3  Paste the token it printed (starts with sk-ant-): " TOKEN
+read -rsp "== 2/3  Paste the token it printed (starts with sk-ant-), then Enter: " TOKEN
+# A long token may be copied as several wrapped lines: take any lines that follow at once.
+while IFS= read -rs -t 0.5 more; do TOKEN+="$more"; done
 echo
-[[ "$TOKEN" == sk-ant-* ]] || { echo "That does not look like a Claude token; nothing changed." >&2; exit 1; }
+TOKEN="${TOKEN//[[:space:]]/}"
+if [[ "$TOKEN" != sk-ant-* ]]; then
+  echo "That does not look like a Claude token (got ${#TOKEN} chars, starting '${TOKEN:0:4}'); nothing changed." >&2
+  echo "Copy the whole line starting sk-ant- from the output above and run this again." >&2
+  exit 1
+fi
 
 echo "== Checking the token works"
 if ! out=$(env -u ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN="$TOKEN" claude -p "Reply with the single word: ok" 2>&1); then
