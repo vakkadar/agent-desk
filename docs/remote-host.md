@@ -53,6 +53,14 @@ Header "Health" button, or `GET /healthz` (JSON, available to the read-only role
 agent, last git push, disk, auth, usage limit. Items are `{level: ok|warn|fail|unknown, detail}`.
 Modules add rows with `registerHealth(name, fn)` from `src/health.ts`.
 
+### Host-down alert
+
+`deploy/watch-host.sh` + `deploy/systemd/agent-desk-watch.{service,timer}` run on a different
+machine (laptop). Every 5 min it fetches `/healthz`; after 2 failures in a row it sends
+"DOWN" (notify-send, plus ntfy.sh push to the phone if `NTFY_TOPIC` is set), and "back UP" on
+recovery. Install notes are at the top of the script. Phone alerts for finished turns and
+approvals use the Alerts button in the desk header (Web Push, needs the home-screen app).
+
 ## 5. Soak test plan (RH-9)
 
 Freeze features ~2026-11-24. Soak 2026-11-25 to 2026-11-30 (>= 5 days) on the HP host.

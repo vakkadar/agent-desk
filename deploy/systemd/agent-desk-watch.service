@@ -1,0 +1,8 @@
+[Unit]
+Description=agent-desk host-down check (runs on another machine)
+After=network-online.target
+
+[Service]
+Type=oneshot
+# see the install notes at the top of watch-host.sh
+ExecStart=%h/.local/bin/agent-desk-watch
