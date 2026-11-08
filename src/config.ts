@@ -1,4 +1,6 @@
 import { readFile } from "node:fs/promises";
+import { parseTargets, type AskTarget } from "./ask-targets.js";
+import { parseProfiles, type ProfileConfig } from "./profiles.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "smol-toml";
@@ -31,8 +33,10 @@ export interface DeskConfig {
   permissionMode: Record<string, string>;
   /** Your own herdr sessions to look in for an open Claude per folder (live_sessions; [] turns it off). */
   liveSessions: string[];
-  /** sanatana hub to offer as a second place to run Ask ([hub] url); the browser calls it with your hub sign-in. */
-  hubUrl?: string;
+  /** Places Ask can run besides Claude on this host ([[ask_target]]; the older [hub] url still works). */
+  askTargets: AskTarget[];
+  /** Who gets which features (profile, [profile_by_email]). */
+  profiles: ProfileConfig;
   /** Context window in tokens, for the /compact hint (context_limit). */
   contextLimit: number;
   /** Scheduled prompts ([[schedule]] in desk.toml). */
@@ -51,6 +55,8 @@ export const DEFAULTS: DeskConfig = {
   approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
   permissionMode: { general: "auto" },
   liveSessions: ["default"],
+  askTargets: [],
+  profiles: { profile: "everyday", byEmail: {} },
   contextLimit: 200_000,
   schedules: [],
 };
@@ -84,7 +90,8 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
     permissionMode: { ...DEFAULTS.permissionMode, ...(raw.permission_mode ?? {}) },
     liveSessions: raw.live_sessions ?? DEFAULTS.liveSessions,
-    hubUrl: typeof raw.hub?.url === "string" ? raw.hub.url.replace(/\/+$/, "") : undefined,
+    askTargets: parseTargets(raw),
+    profiles: parseProfiles(raw),
     contextLimit: raw.context_limit ?? DEFAULTS.contextLimit,
     schedules: lenientSchedules(raw.schedule),
   };

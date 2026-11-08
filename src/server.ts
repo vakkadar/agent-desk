@@ -8,6 +8,9 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { loadConfig } from "./config.js";
 import { Guard } from "./net/guard.js";
 import { CfAccess, viaTunnel } from "./net/cfaccess.js";
+import { featuresOf, needFeature, profileFor, type Feature } from "./profiles.js";
+import { BROWSER_KINDS, openaiAsk, openaiModels, publicTarget, type AskTarget } from "./ask-targets.js";
+import { promptTag, signature, targetHistory } from "./ask-history.js";
 import { EventBus } from "./events/bus.js";
 import { ThreadStore, slugify, sourceKind, type SourceRec } from "./threads.js";
 import { ClaudeAgent } from "./adapters/agent/claude.js";
@@ -38,15 +41,15 @@ const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
 const cfAccess = cfg.network.cfAccess ? new CfAccess(cfg.network.cfAccess) : null;
 
-// Tunnel requests whose Access login is one of the owners (full access without the desk token).
-const ownerReqs = new WeakSet<IncomingMessage>();
+// Verified Access identity of each tunnel request (email, or "service-token").
+const identities = new WeakMap<IncomingMessage, string>();
 
 /** Admission for HTTP and WS upgrade. Tunnel traffic needs a valid Access JWT; fails closed if Access isn't configured. */
 async function admitted(req: IncomingMessage): Promise<boolean> {
   if (viaTunnel(req)) {
     if (!cfAccess) return false;
     const who = await cfAccess.verify(req);
-    if (cfAccess.isOwner(who)) ownerReqs.add(req);
+    if (who !== null) identities.set(req, who);
     return who !== null;
   }
   return guard.roleFor(req.socket.remoteAddress ?? "") !== null;
@@ -54,8 +57,13 @@ async function admitted(req: IncomingMessage): Promise<boolean> {
 
 /** Role for a request (after admitted()). Over the tunnel: owners get action, others need the token. */
 function roleOf(req: IncomingMessage, token?: string) {
-  if (viaTunnel(req)) return ownerReqs.has(req) ? "action" : guard.tunnelRole(token);
+  if (viaTunnel(req)) return cfAccess?.isOwner(identities.get(req) ?? null) ? "action" : guard.tunnelRole(token);
   return guard.roleFor(req.socket.remoteAddress ?? "", token);
+}
+
+/** Profile features for a request: its Access email's profile, else the desk default. */
+function featuresFor(req: IncomingMessage): Set<Feature> {
+  return featuresOf(profileFor(cfg.profiles, identities.get(req)));
 }
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
@@ -180,7 +188,7 @@ http.on("upgrade", async (req, sock, head) => {
   }
   if ((req.url ?? "").split("?")[0] === "/pty") {
     ptyWss.handleUpgrade(req, sock, head, (ws) =>
-      onPtyClient(ws, req, { resolveRole: (token) => roleOf(req, token) }));
+      onPtyClient(ws, req, { resolveRole: (token) => (featuresFor(req).has("terminal") ? roleOf(req, token) : null) }));
     return;
   }
   wss.handleUpgrade(req, sock, head, (ws) => onClient(ws, req));
@@ -218,6 +226,7 @@ async function newSource(location: string, name?: string): Promise<SourceRec> {
 function onClient(ws: WebSocket, req: IncomingMessage) {
   const ip = req.socket.remoteAddress ?? "";
   let role: Role | null = null;
+  let features = new Set<Feature>();
   let unsub = () => {};
   const send = (m: unknown) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(m));
   // Keepalive: proxies (Cloudflare ~100s) drop idle sockets; also reaps dead mobile links.
@@ -240,7 +249,9 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
     if (m.type === "hello") {
       role = roleOf(req, m.token);
       if (!role) return ws.close(4003, "forbidden");
-      send({ type: "welcome", role, keyword: cfg.keyword, hubUrl: cfg.hubUrl, sources: store.list() });
+      const profile = profileFor(cfg.profiles, identities.get(req));
+      features = featuresOf(profile);
+      send({ type: "welcome", role, keyword: cfg.keyword, profile, features: [...features], targets: cfg.askTargets.map(publicTarget), sources: store.list() });
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
       unsub();
       unsub = bus.subscribe((e) => send({ type: "event", e }));
@@ -258,7 +269,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
     }
     if (role !== "action") return send({ type: "error", error: "read-only connection" });
     try {
-      await handleAction(m, send);
+      await handleAction(m, send, features);
     } catch (e: any) {
       send({ type: "error", error: String(e?.message ?? e) });
     }
@@ -266,7 +277,9 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
   ws.on("close", () => { unsub(); helloed.delete(send); });
 }
 
-async function handleAction(m: any, send: (m: unknown) => void) {
+async function handleAction(m: any, send: (m: unknown) => void, features: Set<Feature>) {
+  if (String(m.type).startsWith("hsession_")) needFeature(features, "sessions");
+  if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.
@@ -398,11 +411,18 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       broadcastSources();
       return;
     }
+    case "target_answer":
     case "hub_answer": {
-      // The browser's reply from the hub for a turn hubTurn is waiting on.
-      const done = hubWait.get(`${m.sourceId}/${m.threadId}`);
-      if (!done) throw new Error("no hub turn waiting in that thread");
+      // The page's reply for a browser-side target turn that targetTurn is waiting on.
+      const done = targetWait.get(`${m.sourceId}/${m.threadId}`);
+      if (!done) throw new Error("no ask-target turn waiting in that thread");
       done({ text: m.text == null ? undefined : String(m.text), error: m.error == null ? undefined : String(m.error), model: m.model == null ? undefined : String(m.model) });
+      return;
+    }
+    case "target_models": {
+      // Models for a server-side target (the page lists browser ones itself).
+      const t = need(cfg.askTargets.find((x) => x.id === m.target && x.kind === "openai"), "ask target");
+      send({ type: "target_models", target: t.id, models: await openaiModels(t), default: t.defaultModel ?? "" });
       return;
     }
     case "cancel": {
@@ -476,7 +496,7 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
     hsessions.verify(bound.name, m.pin);
     if (bound.state !== "open") throw new Error(`session ${bound.name} is ${bound.state}; open it from Sessions (⋯ menu)`);
   }
-  if (m.hub) return hubTurn(rec, th, m, send);
+  if ((m.target && m.target.id !== "local") || m.hub) return targetTurn(rec, th, m, send);
   if (rec.id !== GENERAL_ID && th.id === "ask" && !opts.noLive && (cfg.liveSessions.length || bound)) {
     const raw = String(m.text ?? "");
     const nw = /^\s*new:[ \t]*/i.exec(raw);
@@ -524,36 +544,53 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
   }
 }
 
-// Ask run on the hub. The browser holds the hub sign-in, so it makes the call; the desk
-// records the turn in the thread (prompt, answer, done) like any other, and holds the
-// thread busy until the browser reports back (hub_answer) or the wait runs out.
-const HUB_WAIT_MS = 330_000; // hub's own runtime budget is 300 s
-type HubReply = { text?: string; error?: string; model?: string };
-const hubWait = new Map<string, (r: HubReply) => void>();
+// Ask on another target ([[ask_target]]). The turn is logged in the thread like any other
+// (tagged prompt, answer, done), so it shows in history and notes.
+// - browser kinds: the page holds the sign-in, so it makes the call: the desk sends
+//   target_go and keeps the thread busy until target_answer comes back or the wait runs out.
+// - openai: the desk calls the API itself with the key from its env file.
+const TARGET_WAIT_MS = 330_000; // the hub's own runtime budget is 300 s
+type TargetReply = { text?: string; error?: string; model?: string };
+const targetWait = new Map<string, (r: TargetReply) => void>();
 
-async function hubTurn(rec: SourceRec, th: { id: string }, m: any, send: (m: unknown) => void) {
-  if (!cfg.hubUrl) throw new Error("no hub configured ([hub] url in desk.toml)");
+async function targetTurn(rec: SourceRec, th: { id: string }, m: any, send: (m: unknown) => void) {
+  const pick = m.target ?? { id: "hub", ...m.hub }; // m.hub: pages from before targets
+  const t: AskTarget | undefined = cfg.askTargets.find((x) => x.id === pick.id);
+  if (!t) throw new Error(`no ask target "${pick.id}" (desk.toml [[ask_target]])`);
   const text = String(m.text ?? "").trim();
   if (!text) throw new Error("empty message");
-  const agentId = String(m.hub.agent || "expert").slice(0, 60);
-  const model = String(m.hub.model || "").slice(0, 120);
+  const agentId = t.kind === "sanatana-hub" ? String(pick.agent || "expert").slice(0, 60) : "";
+  const model = String(pick.model || "").slice(0, 120);
   const key = `${rec.id}/${th.id}`;
   if (busy.has(key)) throw new Error("thread busy");
   const ac = new AbortController();
   busy.set(key, ac);
-  bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text: `hub:${agentId}${model ? ` ${model}` : ""}[${th.id}]: ${text}` } });
+  const pub = (event: any) => bus.publish({ sourceId: rec.id, threadId: th.id, event });
+  pub({ kind: "prompt", text: promptTag(t.id, [agentId, model].filter(Boolean).join(" "), th.id, text) });
   try {
-    const r = await new Promise<HubReply>((res) => {
-      hubWait.set(key, res);
-      ac.signal.addEventListener("abort", () => res({ error: "cancelled" }));
-      setTimeout(() => res({ error: "the hub did not answer in time" }), HUB_WAIT_MS);
-      send({ type: "hub_go", sourceId: rec.id, threadId: th.id, text, agent: agentId, model });
-    });
-    if (r.text) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: r.model ? `${r.text}\n\n_— hub · ${agentId} · ${r.model}_` : r.text } });
+    let r: TargetReply;
+    if (BROWSER_KINDS.includes(t.kind)) {
+      r = await new Promise<TargetReply>((res) => {
+        targetWait.set(key, res);
+        ac.signal.addEventListener("abort", () => res({ error: "cancelled" }));
+        setTimeout(() => res({ error: `${t.label} did not answer in time` }), TARGET_WAIT_MS);
+        send({ type: "target_go", sourceId: rec.id, threadId: th.id, target: t.id, text, agent: agentId, model });
+      });
+    } else {
+      try {
+        const history = targetHistory(bus.since(0), rec.id, th.id, t.id);
+        const a = await openaiAsk(t, { input: text, history, model, signal: ac.signal });
+        if (a.tokensIn != null && a.tokensOut != null) pub({ kind: "usage", tokensIn: a.tokensIn, tokensOut: a.tokensOut });
+        r = { text: a.text || "(empty answer)", model: a.model };
+      } catch (e: any) {
+        r = { error: ac.signal.aborted ? "cancelled" : String(e?.message ?? e) };
+      }
+    }
+    if (r.text) pub({ kind: "text", text: r.text + signature(t.label, [agentId, r.model].filter(Boolean).join(" · ")) });
     const outcome = r.error === "cancelled" ? "cancelled" : r.error ? "error" : "ok";
-    bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "done", outcome, ...(r.error && outcome === "error" ? { error: `hub: ${r.error}` } : {}) } });
+    pub({ kind: "done", outcome, ...(outcome === "error" ? { error: `${t.label}: ${r.error}` } : {}) });
   } finally {
-    hubWait.delete(key);
+    targetWait.delete(key);
     busy.delete(key);
     await store.save(rec);
   }

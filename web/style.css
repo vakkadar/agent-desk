@@ -299,3 +299,4 @@ form#prompt { position: relative; }
 #runOn[hidden], #runOn [hidden] { display: none; }
 #runOn select { max-width: 14em; }
 #runOn .hubNote { color: var(--warn); white-space: pre-line; }
+#tabs .noprofile { display: none !important; }

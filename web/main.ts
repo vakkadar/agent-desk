@@ -2,7 +2,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSchedules, showSchedules, renderSchedules } from "./schedule.js";
-import { initHub, setHubUrl, hubChoice, onHubGo } from "./hub.js";
+import { initTargets, setTargets, targetChoice, onTargetGo, onTargetModels } from "./targets.js";
 import { initHSessions, showHSessions, renderHSessions, attachByName, onHSessionError, pinFor, onTrustNeeded } from "./hsessions.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
@@ -56,7 +56,8 @@ function onMsg(m: any) {
   if (m.type === "welcome") {
     state.role = m.role;
     state.sources = m.sources;
-    setHubUrl(m.hubUrl);
+    setTargets(m.targets);
+    applyProfile(m.features ?? []);
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
     openHash(location.hash);
     const pf = takePrefill(); // shared text/link: prefill the composer, never auto-send
@@ -65,8 +66,10 @@ function onMsg(m: any) {
     if (!$("main").classList.contains("paneled") && state.mode !== "notes") syncTabs();
     alertStatus(m.role === "action" ? "connected" : "read-only · tap to sign in", m.role === "action" ? "ok" : "");
     renderSources();
-  } else if (m.type === "hub_go") {
-    void onHubGo(m, state.events);
+  } else if (m.type === "target_go") {
+    void onTargetGo(m, state.events);
+  } else if (m.type === "target_models") {
+    onTargetModels(m);
   } else if (m.type === "push_key") {
     onPushKey(m.key);
   } else if (m.type === "sources") {
@@ -373,11 +376,11 @@ function sendText(text: string, attachments: string[] = []) {
   $("#promptErr").hidden = true;
   lastSent = { text, at: Date.now() };
   const hs = state.sources.find((s) => s.id === state.source)?.herdrSession;
-  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined, hub: hubChoice(text) });
+  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined, target: targetChoice(text) });
 }
 
 // ⋯ menu next to Send: Claude commands and the prefixes this box understands.
-const MENU: { label: string; hint: string; run: () => void }[] = [
+const MENU: { label: string; hint: string; run: () => void; needs?: string }[] = [
   { label: "/compact", hint: "summarize the session to free context", run: () => sendText("/compact") },
   { label: "Stop", hint: "stop the running turn", run: () => act({ type: "cancel", sourceId: state.source, threadId: state.thread }) },
   { label: "Close / reopen thread", hint: "fold this thread away (or bring it back); nothing is deleted", run: () => {
@@ -388,7 +391,7 @@ const MENU: { label: string; hint: string; run: () => void }[] = [
   } },
   { label: "c: <id> message", hint: "General: continue q-3 · Project: pick window w3", run: () => insert("c: ") },
   { label: "new: message", hint: "Project Ask: separate session, not your open window", run: () => insert("new: ") },
-  { label: "Sessions", hint: "named herdr sessions: open (attach) or close; attach: <name> works too", run: showHSessions },
+  { label: "Sessions", hint: "named herdr sessions: open (attach) or close; attach: <name> works too", run: showHSessions, needs: "sessions" },
   { label: "Schedules", hint: "scheduled prompts from desk.toml: next run, last run, run now", run: showSchedules },
   { label: "/<command>", hint: "any Claude command is passed as typed", run: () => insert("/") },
 ];
@@ -397,9 +400,19 @@ function insert(prefix: string) {
   if (!ta.value.startsWith(prefix)) ta.value = prefix + ta.value;
   ta.focus();
 }
-{
+// Profile (from the desk's welcome): hide what this person's profile doesn't include.
+// The desk refuses those actions anyway; this just keeps them out of sight.
+let features = new Set<string>();
+function applyProfile(list: string[]) {
+  features = new Set(list);
+  document.querySelectorAll<HTMLElement>("#tabs [data-mode=design], #tabs [data-mode=code]").forEach((b) => b.classList.toggle("noprofile", !features.has(b.dataset.mode!)));
+  $("#termBtn").hidden = !features.has("terminal");
+  renderMenu();
+  if ((state.mode === "design" || state.mode === "code") && !features.has(state.mode)) $<HTMLElement>("#tabs [data-mode=ask]").click();
+}
+function renderMenu() {
   const menu = $("#actMenu");
-  menu.replaceChildren(...MENU.map((m) => {
+  menu.replaceChildren(...MENU.filter((m) => !m.needs || features.has(m.needs)).map((m) => {
     const b = document.createElement("button");
     b.type = "button";
     b.innerHTML = `<b></b><span></span>`;
@@ -408,6 +421,10 @@ function insert(prefix: string) {
     b.onclick = () => { menu.hidden = true; m.run(); };
     return b;
   }));
+}
+{
+  const menu = $("#actMenu");
+  renderMenu();
   $("#actBtn").onclick = (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; };
   document.addEventListener("click", (e) => { if (!menu.contains(e.target as Node)) menu.hidden = true; });
 }
@@ -421,7 +438,7 @@ function toolGist(input: any): string {
 
 initSchedules((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
 initHSessions((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
-initHub((m) => state.ws?.send(JSON.stringify(m)), $("#prompt"));
+initTargets((m) => state.ws?.send(JSON.stringify(m)), $("#prompt"));
 
 function act(m: unknown) {
   if (state.role !== "action") return alertStatus("read-only");
@@ -706,6 +723,7 @@ promptForm.addEventListener("submit", (e) => {
   const at = /^\s*attach:\s*(\S+)\s*$/i.exec(ta.value);
   if (at) {
     if (state.role !== "action") return alertStatus("read-only");
+    if (!features.has("sessions")) return alertStatus("sessions are not part of your profile");
     attachByName(at[1]);
     ta.value = "";
     return;
