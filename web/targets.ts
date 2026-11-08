@@ -129,9 +129,13 @@ export function initTargets(sendFn: (m: unknown) => void, form: HTMLElement) {
 }
 
 /** From the desk's welcome: the picker shows only when there is a target besides this host. */
-export function setTargets(list: PublicTarget[] = []) {
+/** True when the target runs in this page on the reader's own sign-in (a guest may use it). */
+export const isBrowserTarget = (id?: string) => !!targets.find((t) => t.id === id)?.browserSide;
+
+export function setTargets(list: PublicTarget[] = [], guest = false) {
   targets = list;
-  const want = lsGet("runOn");
+  // A guest can only ask browser-side targets: start there instead of "This host".
+  const want = guest && !isBrowserTarget(lsGet("runOn") ?? undefined) ? targets.find((t) => t.browserSide)?.id : lsGet("runOn");
   where.replaceChildren(
     Object.assign(document.createElement("option"), { value: "local", textContent: "This host" }),
     ...targets.map((t) => Object.assign(document.createElement("option"), { value: t.id, textContent: t.label })),

@@ -61,9 +61,28 @@ function roleOf(req: IncomingMessage, token?: string) {
   return guard.roleFor(req.socket.remoteAddress ?? "", token);
 }
 
-/** Profile features for a request: its Access email's profile, else the desk default. */
+/** A guest: came over the tunnel with an Access login that is not an owner. */
+function isGuest(req: IncomingMessage): boolean {
+  return viaTunnel(req) && !cfAccess?.isOwner(identities.get(req) ?? null);
+}
+
+/** Profile for a request: its Access email's own, else guest_profile for a guest, else the desk default. */
+function profileOf(req: IncomingMessage) {
+  return profileFor(cfg.profiles, identities.get(req), isGuest(req));
+}
 function featuresFor(req: IncomingMessage): Set<Feature> {
-  return featuresOf(profileFor(cfg.profiles, identities.get(req)));
+  return featuresOf(profileOf(req));
+}
+
+/** guest_ask: a read-only connection may ask a browser-side target (the call runs on the
+ *  guest's own sign-in there) as a new or picked General question. Nothing else. */
+function guestAskOk(m: any): boolean {
+  if (!cfg.profiles.guestAsk) return false;
+  if (m.type === "target_answer") return true;
+  if (m.type !== "prompt" || m.sourceId !== GENERAL_ID || m.hub) return false;
+  const t = cfg.askTargets.find((x) => x.id === m.target?.id);
+  const text = String(m.text ?? "");
+  return !!t && BROWSER_KINDS.includes(t.kind) && !text.trimStart().startsWith("/") && !parseExisting(text);
 }
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
@@ -249,9 +268,9 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
     if (m.type === "hello") {
       role = roleOf(req, m.token);
       if (!role) return ws.close(4003, "forbidden");
-      const profile = profileFor(cfg.profiles, identities.get(req));
+      const profile = profileOf(req);
       features = featuresOf(profile);
-      send({ type: "welcome", role, keyword: cfg.keyword, profile, features: [...features], targets: cfg.askTargets.map(publicTarget), sources: store.list() });
+      send({ type: "welcome", role, keyword: cfg.keyword, profile, features: [...features], guestAsk: cfg.profiles.guestAsk, targets: cfg.askTargets.map(publicTarget), sources: store.list() });
       for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
       unsub();
       unsub = bus.subscribe((e) => send({ type: "event", e }));
@@ -267,7 +286,8 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       else send({ type: "search", q: m.q, hits: searchEvents(evs, String(m.q ?? "")) });
       return;
     }
-    if (role !== "action") return send({ type: "error", error: "read-only connection" });
+    if (role !== "action" && !guestAskOk(m)) return send({ type: "error", error: "read-only connection" });
+    if (role !== "action") m.attachments = [];
     try {
       await handleAction(m, send, features);
     } catch (e: any) {
@@ -414,9 +434,10 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
     case "target_answer":
     case "hub_answer": {
       // The page's reply for a browser-side target turn that targetTurn is waiting on.
-      const done = targetWait.get(`${m.sourceId}/${m.threadId}`);
-      if (!done) throw new Error("no ask-target turn waiting in that thread");
-      done({ text: m.text == null ? undefined : String(m.text), error: m.error == null ? undefined : String(m.error), model: m.model == null ? undefined : String(m.model) });
+      const w = targetWait.get(`${m.sourceId}/${m.threadId}`);
+      // Only the page that was asked may answer (a guest can't answer someone else's turn).
+      if (!w || w.send !== send) throw new Error("no ask-target turn waiting in that thread");
+      w.done({ text: m.text == null ? undefined : String(m.text), error: m.error == null ? undefined : String(m.error), model: m.model == null ? undefined : String(m.model) });
       return;
     }
     case "target_models": {
@@ -551,7 +572,7 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
 // - openai: the desk calls the API itself with the key from its env file.
 const TARGET_WAIT_MS = 330_000; // the hub's own runtime budget is 300 s
 type TargetReply = { text?: string; error?: string; model?: string };
-const targetWait = new Map<string, (r: TargetReply) => void>();
+const targetWait = new Map<string, { done: (r: TargetReply) => void; send: (m: unknown) => void }>();
 
 async function targetTurn(rec: SourceRec, th: { id: string }, m: any, send: (m: unknown) => void) {
   const pick = m.target ?? { id: "hub", ...m.hub }; // m.hub: pages from before targets
@@ -571,7 +592,7 @@ async function targetTurn(rec: SourceRec, th: { id: string }, m: any, send: (m: 
     let r: TargetReply;
     if (BROWSER_KINDS.includes(t.kind)) {
       r = await new Promise<TargetReply>((res) => {
-        targetWait.set(key, res);
+        targetWait.set(key, { done: res, send });
         ac.signal.addEventListener("abort", () => res({ error: "cancelled" }));
         setTimeout(() => res({ error: `${t.label} did not answer in time` }), TARGET_WAIT_MS);
         send({ type: "target_go", sourceId: rec.id, threadId: th.id, target: t.id, text, agent: agentId, model });

@@ -11,13 +11,26 @@ Two settings in `~/agent-desk-data/desk.toml` shape the desk for the people usin
 
 ```toml
 profile = "everyday"                 # everyone, unless listed below
+guest_profile = "everyday"           # tunnel logins that are not owners and not listed (default everyday)
+guest_ask = true                     # read-only guests may ask browser-side targets (default false)
 
 [profile_by_email]                   # Cloudflare Access logins (see cloudflare-tunnel.md)
 "you@example.com" = "developer"
 "guest@example.com" = "everyday"
 ```
 
-Connections without an Access login (localhost, LAN) get `profile`.
+Connections without an Access login (localhost, LAN) get `profile`. A login over the
+tunnel that is not in `owners` and not listed gets `guest_profile`, so a newly admitted
+guest never gets more than you meant.
+
+### Guests asking on a hub
+
+With `guest_ask = true`, a read-only connection (a guest without the desk token) may ask
+questions in General on a browser-side target (`sanatana-hub` or `browser`, below). The page
+makes that call with the guest's own sign-in there, so it never uses this host's Claude or
+an API key. Everything else stays read-only: Claude on this host, `openai` targets, `/`
+commands, `c:`, attachments, other sources. Only the page that asked can answer its own
+turn. Guests' questions and answers are saved in the desk's history like any other.
 The desk enforces the profile: it refuses Design/Code threads, the terminal and
 sessions for a profile without them. The page only hides what can't be used.
 A profile is not a permission level for the rest: read-only vs. full access is

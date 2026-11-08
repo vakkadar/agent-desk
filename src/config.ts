@@ -56,7 +56,7 @@ export const DEFAULTS: DeskConfig = {
   permissionMode: { general: "auto" },
   liveSessions: ["default"],
   askTargets: [],
-  profiles: { profile: "everyday", byEmail: {} },
+  profiles: { profile: "everyday", guest: "everyday", byEmail: {}, guestAsk: false },
   contextLimit: 200_000,
   schedules: [],
 };

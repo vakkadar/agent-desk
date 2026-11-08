@@ -2,7 +2,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSchedules, showSchedules, renderSchedules } from "./schedule.js";
-import { initTargets, setTargets, targetChoice, onTargetGo, onTargetModels } from "./targets.js";
+import { initTargets, isBrowserTarget, setTargets, targetChoice, onTargetGo, onTargetModels } from "./targets.js";
 import { initHSessions, showHSessions, renderHSessions, attachByName, onHSessionError, pinFor, onTrustNeeded } from "./hsessions.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
@@ -56,7 +56,8 @@ function onMsg(m: any) {
   if (m.type === "welcome") {
     state.role = m.role;
     state.sources = m.sources;
-    setTargets(m.targets);
+    guestAsk = !!m.guestAsk && m.role !== "action";
+    setTargets(m.targets, guestAsk);
     applyProfile(m.features ?? []);
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
     openHash(location.hash);
@@ -371,12 +372,21 @@ function showCtx(c: { used: number; limit: number } | null, running: boolean) {
   el.append(b);
 }
 
+let guestAsk = false; // welcome: this read-only connection may ask browser-side targets in General
 function sendText(text: string, attachments: string[] = []) {
   if (!state.source || (!state.thread && !isGeneral())) return alertStatus("pick a source and thread");
   $("#promptErr").hidden = true;
   lastSent = { text, at: Date.now() };
   const hs = state.sources.find((s) => s.id === state.source)?.herdrSession;
-  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined, target: targetChoice(text) });
+  const target = targetChoice(text);
+  if (guestAsk && state.role !== "action") {
+    // Read-only guest: the desk only takes questions to a browser-side target in General.
+    if (!isGeneral()) return alertStatus("guests can ask in General");
+    if (!isBrowserTarget(target?.id)) return alertStatus("read-only: pick a Run on target other than This host");
+    state.ws?.send(JSON.stringify({ type: "prompt", sourceId: state.source, threadId: state.thread, text, target }));
+    return;
+  }
+  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined, target });
 }
 
 // ⋯ menu next to Send: Claude commands and the prefixes this box understands.
