@@ -28,6 +28,7 @@ import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGene
 import { contextUsed } from "./context.js";
 import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
+import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -101,6 +102,11 @@ const http = createServer(async (req, res) => {
     return;
   }
   if (!viaTunnel(req) && handleMcp(req, res, mcpSecret, approvals)) return;
+  if (handleUploadHttp(req, res, {
+    role: (r, token) => (viaTunnel(r) ? guard.tunnelRole(token) : guard.roleFor(r.socket.remoteAddress ?? "", token)),
+    sameOrigin,
+    folder: (id) => store.get(id)?.location,
+  })) return;
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true, uptime: process.uptime(), sources: store.list().length, checks: await collectHealth() }));
@@ -334,7 +340,9 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       const ac = new AbortController();
       busy.set(key, ac);
       // FR-12 tag, except Claude commands like /compact, which must arrive as typed.
-      const text = String(m.text).trimStart().startsWith("/") ? String(m.text).trim() : `${cfg.keyword}[${th.id}]: ${m.text}`;
+      const files = checkPaths(rec.location, m.attachments);
+      const body = buildPrompt(String(m.text), files);
+      const text = body.trimStart().startsWith("/") ? body.trim() : `${cfg.keyword}[${th.id}]: ${body}`;
       bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
       try {
         const turn = live
