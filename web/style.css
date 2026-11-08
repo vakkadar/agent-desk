@@ -276,3 +276,9 @@ form#prompt { position: relative; }
 #actMenu span { color: var(--mute); font-size: 12px; }
 #ctxHint { flex-basis: 100%; font-size: 13px; color: var(--warn); }
 #ctxHint button { margin-left: 6px; }
+#schedules { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); width: min(520px, calc(100vw - 32px)); padding: 14px 16px; }
+#schedules::backdrop { background: rgba(0, 0, 0, 0.4); }
+#schedules .hhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#schedules .srow { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-top: 1px solid var(--line); }
+#schedules .srow span { display: flex; flex-direction: column; min-width: 0; }
+#schedules small { color: var(--mute); }
