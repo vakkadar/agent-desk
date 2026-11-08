@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parse } from "smol-toml";
 import type { CfAccessOpts } from "./net/cfaccess.js";
+import { parseSchedules, type Schedule } from "./schedule.js";
 
 export interface DeskConfig {
   dataDir: string;
@@ -32,6 +33,8 @@ export interface DeskConfig {
   liveSessions: string[];
   /** Context window in tokens, for the /compact hint (context_limit). */
   contextLimit: number;
+  /** Scheduled prompts ([[schedule]] in desk.toml). */
+  schedules: Schedule[];
 }
 
 export const DEFAULTS: DeskConfig = {
@@ -47,6 +50,7 @@ export const DEFAULTS: DeskConfig = {
   permissionMode: { general: "auto" },
   liveSessions: ["default"],
   contextLimit: 200_000,
+  schedules: [],
 };
 
 /** Load desk.toml from the data dir; missing file → defaults. */
@@ -79,5 +83,24 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     permissionMode: { ...DEFAULTS.permissionMode, ...(raw.permission_mode ?? {}) },
     liveSessions: raw.live_sessions ?? DEFAULTS.liveSessions,
     contextLimit: raw.context_limit ?? DEFAULTS.contextLimit,
+    schedules: lenientSchedules(raw.schedule),
   };
+}
+
+/** A bad [[schedule]] entry is skipped with a warning; it must not stop the desk from starting. */
+function lenientSchedules(raw: unknown) {
+  try {
+    return parseSchedules(raw);
+  } catch (e: any) {
+    console.warn(`[schedule] ${e.message}`);
+    if (!Array.isArray(raw)) return [];
+    const ok: ReturnType<typeof parseSchedules> = [];
+    for (const r of raw) {
+      try {
+        const [s] = parseSchedules([r]);
+        if (!ok.some((o) => o.name === s.name)) ok.push(s);
+      } catch { /* already warned */ }
+    }
+    return ok;
+  }
 }

@@ -30,6 +30,7 @@ import { contextUsed } from "./context.js";
 import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
+import { Scheduler, scheduleTitle } from "./schedule.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -197,6 +198,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       helloed.add(send);
       return;
     }
+    if (role && m.type === "schedules") return send({ type: "schedules", rows: scheduler.rows() });
     if (role && (m.type === "usage" || m.type === "search")) {
       await bus.flush();
       const evs = await readJournal(join(cfg.dataDir, ".index", "events.jsonl"));
@@ -292,79 +294,13 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       send({ type: "sources", sources: store.list() });
       return;
     }
-    case "prompt": {
-      const rec = need(store.get(m.sourceId), "source");
-      let th;
-      const picked = rec.id === GENERAL_ID && m.threadId !== "ask" ? rec.threads[m.threadId] : undefined;
-      if (picked && !parseExisting(String(m.text ?? ""))) {
-        th = picked; // General question picked in the list: continue it, no prefix needed
-      } else if (rec.id === GENERAL_ID) {
-        // General: new session per prompt unless "c: <match>" on the first line.
-        const r = await routeGeneral(rec, agent, String(m.text ?? ""), (t) => summarize(t, 80));
-        th = r.thread;
-        m.text = r.text;
-        if (r.created) {
-          await store.save(rec);
-          broadcastSources();
-        }
-        send({ type: "focus", sourceId: rec.id, threadId: th.id });
-      } else th = need(rec.threads[m.threadId], "thread");
-      if (th.closed) { // writing to a closed thread reopens it
-        delete th.closed;
-        await store.save(rec);
-        broadcastSources();
-      }
-      // Project Ask: go into the Claude window already open in that folder (one conversation
-      // per folder). "new:" skips it; "c: w3" picks a window when several are open.
-      let live: LivePane | undefined;
-      if (rec.id !== GENERAL_ID && th.id === "ask" && cfg.liveSessions.length) {
-        const raw = String(m.text ?? "");
-        const nw = /^\s*new:[ \t]*/i.exec(raw);
-        if (nw) m.text = raw.slice(nw[0].length).trim();
-        else {
-          const ex = parseExisting(raw);
-          const panes = await liveClaude.find(rec.location);
-          const pick = pickLive(panes, ex?.query);
-          if (ex) {
-            if (pick.kind === "none") throw new Error(`no open Claude window in ${rec.location} matches "${ex.query}"${panes.length ? `. Open:\n${listPanes(panes)}` : ""}`);
-            if (!ex.rest) throw new Error("c: add your message after the window id (c: w3 your message)");
-            m.text = ex.rest;
-          }
-          if (pick.kind === "many") throw new Error(`${pick.panes.length} Claude windows are open in ${rec.location}. Pick one:\n${listPanes(pick.panes)}\nor new: <message> for a separate session`);
-          if (pick.kind === "one") {
-            if (pick.pane.status === "working" || pick.pane.status === "blocked")
-              throw new Error(`Claude window ${pick.pane.paneId} is busy (${pick.pane.status}). Wait for it, or new: <message> for a separate session`);
-            live = pick.pane;
-          }
-        }
-        if (!String(m.text ?? "").trim()) throw new Error("empty message");
-      }
-      const key = `${rec.id}/${th.id}`;
-      if (busy.has(key)) throw new Error("thread busy");
-      const ac = new AbortController();
-      busy.set(key, ac);
-      // FR-12 tag, except Claude commands like /compact, which must arrive as typed.
-      const files = checkPaths(rec.location, m.attachments);
-      const body = buildPrompt(String(m.text), files);
-      const text = body.trimStart().startsWith("/") ? body.trim() : `${cfg.keyword}[${th.id}]: ${body}`;
-      bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
-      try {
-        const turn = live
-          ? liveClaude.send(live, text, ac.signal)
-          : agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode] });
-        if (live) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: `_→ your Claude window ${live.paneId} (${live.title || live.sessionId?.slice(0, 8)})_\n\n` } });
-        for await (const ev of turn) {
-          bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
-        }
-        const sid = live?.sessionId ?? th.session.sessionId;
-        const used = sid ? await contextUsed(live?.cwd ?? th.session.cwd, sid).catch(() => undefined) : undefined;
-        if (used) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "context", used, limit: cfg.contextLimit } });
-      } finally {
-        busy.delete(key);
-        await store.save(rec); // persists session id assigned on fork
-      }
+    case "prompt":
+      await runPrompt(m, send);
       return;
-    }
+    case "schedule_run":
+      if (!scheduler.runNow(String(m.name))) throw new Error(`schedule ${m.name} is still running`);
+      send({ type: "schedules", rows: scheduler.rows() });
+      return;
     case "close": {
       // Close (fold away) or reopen a thread. Nothing is deleted; the transcript stays.
       const rec = need(store.get(m.sourceId), "source");
@@ -403,6 +339,82 @@ async function handleAction(m: any, send: (m: unknown) => void) {
   }
 }
 
+/**
+ * One prompt turn, shared by the browser "prompt" action and scheduled runs.
+ * opts.title: name for a new General question. opts.noLive: use the desk's own session, never the live herdr window.
+ */
+async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: string; noLive?: boolean } = {}) {
+  const rec = need(store.get(m.sourceId), "source");
+  let th;
+  const picked = rec.id === GENERAL_ID && m.threadId !== "ask" ? rec.threads[m.threadId] : undefined;
+  if (picked && !parseExisting(String(m.text ?? ""))) {
+    th = picked; // General question picked in the list: continue it, no prefix needed
+  } else if (rec.id === GENERAL_ID) {
+    // General: new session per prompt unless "c: <match>" on the first line.
+    const r = await routeGeneral(rec, agent, String(m.text ?? ""), (t) => opts.title ?? summarize(t, 80));
+    th = r.thread;
+    m.text = r.text;
+    if (r.created) {
+      await store.save(rec);
+      broadcastSources();
+    }
+    send({ type: "focus", sourceId: rec.id, threadId: th.id });
+  } else th = need(rec.threads[m.threadId], "thread");
+  if (th.closed) { // writing to a closed thread reopens it
+    delete th.closed;
+    await store.save(rec);
+    broadcastSources();
+  }
+  // Project Ask: go into the Claude window already open in that folder (one conversation
+  // per folder). "new:" skips it; "c: w3" picks a window when several are open.
+  let live: LivePane | undefined;
+  if (rec.id !== GENERAL_ID && th.id === "ask" && !opts.noLive && cfg.liveSessions.length) {
+    const raw = String(m.text ?? "");
+    const nw = /^\s*new:[ \t]*/i.exec(raw);
+    if (nw) m.text = raw.slice(nw[0].length).trim();
+    else {
+      const ex = parseExisting(raw);
+      const panes = await liveClaude.find(rec.location);
+      const pick = pickLive(panes, ex?.query);
+      if (ex) {
+        if (pick.kind === "none") throw new Error(`no open Claude window in ${rec.location} matches "${ex.query}"${panes.length ? `. Open:\n${listPanes(panes)}` : ""}`);
+        if (!ex.rest) throw new Error("c: add your message after the window id (c: w3 your message)");
+        m.text = ex.rest;
+      }
+      if (pick.kind === "many") throw new Error(`${pick.panes.length} Claude windows are open in ${rec.location}. Pick one:\n${listPanes(pick.panes)}\nor new: <message> for a separate session`);
+      if (pick.kind === "one") {
+        if (pick.pane.status === "working" || pick.pane.status === "blocked")
+          throw new Error(`Claude window ${pick.pane.paneId} is busy (${pick.pane.status}). Wait for it, or new: <message> for a separate session`);
+        live = pick.pane;
+      }
+    }
+    if (!String(m.text ?? "").trim()) throw new Error("empty message");
+  }
+  const key = `${rec.id}/${th.id}`;
+  if (busy.has(key)) throw new Error("thread busy");
+  const ac = new AbortController();
+  busy.set(key, ac);
+  // FR-12 tag, except Claude commands like /compact, which must arrive as typed.
+  const body = buildPrompt(String(m.text), checkPaths(rec.location, m.attachments));
+  const text = body.trimStart().startsWith("/") ? body.trim() : `${cfg.keyword}[${th.id}]: ${body}`;
+  bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "prompt", text } });
+  try {
+    const turn = live
+      ? liveClaude.send(live, text, ac.signal)
+      : agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode] });
+    if (live) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: `_→ your Claude window ${live.paneId} (${live.title || live.sessionId?.slice(0, 8)})_\n\n` } });
+    for await (const ev of turn) {
+      bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
+    }
+    const sid = live?.sessionId ?? th.session.sessionId;
+    const used = sid ? await contextUsed(live?.cwd ?? th.session.cwd, sid).catch(() => undefined) : undefined;
+    if (used) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "context", used, limit: cfg.contextLimit } });
+  } finally {
+    busy.delete(key);
+    await store.save(rec); // persists session id assigned on fork
+  }
+}
+
 function expandHome(p: string): string {
   return p === "~" ? homedir() + "/" : p.startsWith("~/") ? homedir() + p.slice(1) : p;
 }
@@ -411,6 +423,11 @@ function need<T>(v: T | undefined, what: string): T {
   if (v === undefined) throw new Error(`no such ${what}`);
   return v;
 }
+
+// Scheduled prompts: same path as a browser prompt, but on the desk's own session.
+const scheduler = new Scheduler(cfg.schedules, join(cfg.dataDir, ".index", "schedule-state.json"), (sch) =>
+  runPrompt({ sourceId: sch.source, threadId: "ask", text: sch.prompt }, () => {}, { title: scheduleTitle(sch), noLive: true }));
+await scheduler.start();
 
 for (const host of cfg.network.bind) {
   // One listener per bind address; http.Server can listen once, so clone per extra host.

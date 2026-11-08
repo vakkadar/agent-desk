@@ -1,6 +1,7 @@
 // Minimal SPA: connect, replay, render turn cards per thread.
 import { renderMarkdown } from "./markdown.js";
 import { initUsage, showUsage, onUsage } from "./usage.js";
+import { initSchedules, showSchedules, renderSchedules } from "./schedule.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
@@ -79,6 +80,8 @@ function onMsg(m: any) {
     state.source = m.sourceId;
     state.thread = m.threadId;
     renderSources();
+  } else if (m.type === "schedules") {
+    renderSchedules(m.rows);
   } else if (m.type === "notes") {
     renderNotes(m.date, m.rows);
   } else if (m.type === "ls") {
@@ -370,6 +373,7 @@ const MENU: { label: string; hint: string; run: () => void }[] = [
   } },
   { label: "c: <id> message", hint: "General: continue q-3 · Project: pick window w3", run: () => insert("c: ") },
   { label: "new: message", hint: "Project Ask: separate session, not your open window", run: () => insert("new: ") },
+  { label: "Schedules", hint: "scheduled prompts from desk.toml: next run, last run, run now", run: showSchedules },
   { label: "/<command>", hint: "any Claude command is passed as typed", run: () => insert("/") },
 ];
 function insert(prefix: string) {
@@ -398,6 +402,8 @@ function toolGist(input: any): string {
   const s = typeof v === "string" ? v : JSON.stringify(input ?? "");
   return s.length > 140 ? s.slice(0, 140) + "…" : s;
 }
+
+initSchedules((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
 
 function act(m: unknown) {
   if (state.role !== "action") return alertStatus("read-only");
