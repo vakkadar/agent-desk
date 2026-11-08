@@ -10,6 +10,8 @@
 #   cp deploy/watch-host.sh ~/.local/bin/agent-desk-watch && chmod +x ~/.local/bin/agent-desk-watch
 #   cp deploy/systemd/agent-desk-watch.{service,timer} ~/.config/systemd/user/
 #   printf 'WATCH_URL=http://hp-lan:7420/healthz\nNTFY_TOPIC=pick-a-long-random-name\n' > ~/.config/agent-desk/watch.env
+# If the desk port is firewalled from this machine, check over ssh instead (needs key auth):
+#   WATCH_SSH=hp  -> runs `curl http://127.0.0.1:7420/healthz` on that host
 #   systemctl --user daemon-reload && systemctl --user enable --now agent-desk-watch.timer
 # Test: run agent-desk-watch by hand; logs: journalctl --user -u agent-desk-watch
 set -u
@@ -21,7 +23,16 @@ URL="${WATCH_URL:-http://hp-lan:7420/healthz}"
 
 read -r last fails 2>/dev/null < "$STATE" || { last=ok; fails=0; }
 
-if curl -fsS --max-time 10 -o /dev/null "$URL" 2>/dev/null; then
+check() {
+  if [ -n "${WATCH_SSH:-}" ]; then
+    ssh -o BatchMode=yes -o ConnectTimeout=10 "$WATCH_SSH" "curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:7420/healthz" 2>/dev/null
+  else
+    curl -fsS --max-time 10 -o /dev/null "$URL" 2>/dev/null
+  fi
+}
+[ -n "${WATCH_SSH:-}" ] && URL="ssh $WATCH_SSH (127.0.0.1:7420/healthz)"
+
+if check; then
   now=ok; fails=0
 else
   now=$last; fails=$((fails + 1))
