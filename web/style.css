@@ -101,6 +101,9 @@ aside li {
 }
 aside li:hover { background: var(--sunk); }
 aside li.on { background: var(--acc-soft); color: var(--acc); font-weight: 550; }
+aside li.closedHead { color: var(--mute); font-size: 12.5px; margin-top: 6px; }
+aside li.closed { color: var(--mute); }
+aside li.closed.on { color: var(--acc); }
 #newThread { width: 100%; margin-top: 8px; border-style: dashed; color: var(--mute); }
 #newThread:hover { color: var(--fg); }
 #resumeBtn { width: 100%; margin-top: 6px; border-style: dashed; color: var(--mute); }

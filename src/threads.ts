@@ -10,6 +10,7 @@ export interface ThreadRec {
   session: SessionRef;
   createdAt: string;
   title?: string; // General questions: first prompt, for the list and `c:` matching
+  closed?: string; // ISO time it was closed: folded away in the list; sending to it reopens it
 }
 
 export interface SourceRec {

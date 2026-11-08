@@ -128,14 +128,14 @@ function renderThreads() {
     if (!state.thread) state.thread = "ask";
     $("#threads").replaceChildren(
       li("+ New question", state.thread === "ask", () => { state.thread = "ask"; renderThreads(); }),
-      ...qs.map((t) => li(`${t.id} · ${t.title ?? ""}`, t.id === state.thread, () => { state.thread = t.id; renderThreads(); })),
+      ...withClosed(qs, (t) => `${t.id} · ${t.title ?? ""}`),
     );
     ta.placeholder = state.thread === "ask"
       ? "New question (new session). To continue one, pick it in the list or start with c: q-3"
       : `Continuing ${state.thread}. Pick "+ New question" for a fresh session.`;
   } else {
-    const ids = src ? Object.keys(src.threads).filter((t) => (state.mode === "ask" ? t === "ask" : t.startsWith(state.mode + "-"))) : [];
-    $("#threads").replaceChildren(...ids.map((t) => li(t, t === state.thread, () => { state.thread = t; renderThreads(); })));
+    const ts = src ? Object.values<any>(src.threads).filter((t) => (state.mode === "ask" ? t.id === "ask" : t.id.startsWith(state.mode + "-"))) : [];
+    $("#threads").replaceChildren(...withClosed(ts, (t) => t.id));
     ta.placeholder = "Message (Ctrl+Enter to send)";
   }
   const nb = $<HTMLButtonElement>("#newThread");
@@ -144,6 +144,25 @@ function renderThreads() {
   $("#resumeBtn").hidden = nb.hidden || src?.kind !== "local";
   if ($("#resumeBtn").hidden) $("#resumeList").hidden = true;
   renderCards();
+}
+
+/** Open threads, then a folded "Closed (N)" row that expands to the closed ones. */
+let showClosed = false;
+function withClosed(ts: any[], label: (t: any) => string): HTMLLIElement[] {
+  const row = (t: any) => li(label(t), t.id === state.thread, () => { state.thread = t.id; renderThreads(); });
+  const closed = ts.filter((t) => t.closed);
+  const out = ts.filter((t) => !t.closed).map(row);
+  if (!closed.length) return out;
+  const head = li(`${showClosed ? "▾" : "▸"} Closed (${closed.length})`, false, () => { showClosed = !showClosed; renderThreads(); });
+  head.classList.add("closedHead");
+  out.push(head);
+  if (showClosed || closed.some((t) => t.id === state.thread))
+    out.push(...closed.map((t) => { const el = row(t); el.classList.add("closed"); return el; }));
+  return out;
+}
+
+function currentThread(): any {
+  return state.sources.find((s) => s.id === state.source)?.threads?.[state.thread];
 }
 
 function li(text: string, on: boolean, click: () => void) {
@@ -333,6 +352,12 @@ function sendText(text: string) {
 const MENU: { label: string; hint: string; run: () => void }[] = [
   { label: "/compact", hint: "summarize the session to free context", run: () => sendText("/compact") },
   { label: "Stop", hint: "stop the running turn", run: () => act({ type: "cancel", sourceId: state.source, threadId: state.thread }) },
+  { label: "Close / reopen thread", hint: "fold this thread away (or bring it back); nothing is deleted", run: () => {
+    const th = currentThread();
+    if (!th || th.id === "ask") return alertStatus("pick a question or thread to close");
+    act({ type: "close", sourceId: state.source, threadId: th.id, closed: !th.closed });
+    if (!th.closed) state.thread = isGeneral() ? "ask" : ""; // closed: move on to a fresh question
+  } },
   { label: "c: <id> message", hint: "General: continue q-3 · Project: pick window w3", run: () => insert("c: ") },
   { label: "new: message", hint: "Project Ask: separate session, not your open window", run: () => insert("new: ") },
   { label: "/<command>", hint: "any Claude command is passed as typed", run: () => insert("/") },

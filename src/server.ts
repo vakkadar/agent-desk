@@ -294,6 +294,11 @@ async function handleAction(m: any, send: (m: unknown) => void) {
         }
         send({ type: "focus", sourceId: rec.id, threadId: th.id });
       } else th = need(rec.threads[m.threadId], "thread");
+      if (th.closed) { // writing to a closed thread reopens it
+        delete th.closed;
+        await store.save(rec);
+        broadcastSources();
+      }
       // Project Ask: go into the Claude window already open in that folder (one conversation
       // per folder). "new:" skips it; "c: w3" picks a window when several are open.
       let live: LivePane | undefined;
@@ -341,6 +346,17 @@ async function handleAction(m: any, send: (m: unknown) => void) {
         busy.delete(key);
         await store.save(rec); // persists session id assigned on fork
       }
+      return;
+    }
+    case "close": {
+      // Close (fold away) or reopen a thread. Nothing is deleted; the transcript stays.
+      const rec = need(store.get(m.sourceId), "source");
+      const th = need(rec.threads[m.threadId], "thread");
+      if (th.id === "ask") throw new Error("the main Ask thread can't be closed");
+      if (m.closed === false) delete th.closed;
+      else th.closed = new Date().toISOString();
+      await store.save(rec);
+      broadcastSources();
       return;
     }
     case "cancel": {
