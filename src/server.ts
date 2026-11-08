@@ -22,6 +22,7 @@ import { onPtyClient, listSessions } from "./pty.js";
 import { DeskGit, gitStatus, setDeskGit } from "./git.js";
 import { randomUUID } from "node:crypto";
 import { Approvals } from "./approvals.js";
+import { Push } from "./push.js";
 import { handleMcp } from "./mcp/permission.js";
 import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessions.js";
 import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
@@ -59,6 +60,9 @@ registerHealth("mux", async () => {
   return { level: s.ok ? "ok" : "warn", detail: s.detail };
 });
 await bus.init();
+const push = new Push(cfg.dataDir);
+await push.init();
+push.attach(bus);
 await store.load();
 await ensureGeneral(store, agent, cfg.generalDir);
 if (mux.herdr) {
@@ -385,6 +389,15 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       if (!approvals.resolve(String(m.id), m.allow === true, "browser")) throw new Error("approval already resolved or unknown");
       return;
     }
+    case "push_key":
+      send({ type: "push_key", key: push.publicKey });
+      return;
+    case "push_subscribe":
+      await push.subscribe(m.sub);
+      return;
+    case "push_unsubscribe":
+      await push.unsubscribe(String(m.endpoint));
+      return;
     default:
       throw new Error(`unknown message ${m.type}`);
   }
