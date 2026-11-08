@@ -2,13 +2,16 @@
 // Registry in <data>/.index/herdr-sessions.json (not in git: holds PIN hashes).
 // State machine: initialized (created, Claude running, desk not attached)
 //   -> open (desk drives its Claude window) -> closed (herdr session stopped) -> open ...
+// persistent: restarted when the desk starts (after a reboot or restart) unless closed, with
+// Claude resuming the folder's last conversation.
 // The CLI (hsession-cli.ts) and the desk both write the file; reads reload it on change.
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { projectDir } from "./claude-sessions.js";
 
 export type HState = "initialized" | "open" | "closed";
 
@@ -17,6 +20,7 @@ export interface HSession {
   location: "hp"; // only the desk host for now
   dir: string;
   pinHash?: string;
+  persistent?: boolean;
   state: HState;
   createdAt: string;
   updatedAt: string;
@@ -87,13 +91,14 @@ export class HerdrSessions {
   /** Session names the desk should look in for Claude windows. */
   openNames(): string[] { return this.list().filter((r) => r.state === "open").map((r) => r.name); }
 
-  register(o: { name: string; dir: string; pin?: string }): HSession {
+  register(o: { name: string; dir: string; pin?: string; persistent?: boolean }): HSession {
     checkName(o.name);
     this.load();
     if (this.rows.some((r) => r.name === o.name)) throw new Error(`session ${o.name} already registered`);
     const ts = new Date(this.now()).toISOString();
     const s: HSession = { name: o.name, location: "hp", dir: o.dir, state: "initialized", createdAt: ts, updatedAt: ts };
     if (o.pin) s.pinHash = hashPin(o.pin);
+    if (o.persistent) s.persistent = true;
     this.rows.push(s);
     this.save();
     return { ...s };
@@ -106,6 +111,17 @@ export class HerdrSessions {
     s.updatedAt = new Date(this.now()).toISOString();
     this.save();
   }
+
+  setPersistent(name: string, on: boolean): void {
+    const s = this.need(name);
+    if (on) s.persistent = true;
+    else delete s.persistent;
+    s.updatedAt = new Date(this.now()).toISOString();
+    this.save();
+  }
+
+  /** Persistent sessions to bring back at desk start: not closed by the user. */
+  toRestore(): HSession[] { return this.list().filter((r) => r.persistent && r.state !== "closed"); }
 
   setState(name: string, to: HState): void {
     const s = this.need(name);
@@ -164,10 +180,53 @@ export async function runningSessions(bin = process.env.AGENT_DESK_HERDR_BIN || 
   }
 }
 
-/** Start the herdr session if needed, in its folder, with Claude running in it. */
-export async function startSession(s: HSession): Promise<string> {
-  const { stdout } = await run("bash", [SCRIPT, s.name, s.dir, "--claude"], { env: cleanEnv(), timeout: 60_000 });
+/** Claude has a past conversation in this folder (so `claude --continue` has something to resume). */
+export function hasConversation(dir: string): boolean {
+  const d = projectDir(dir);
+  return existsSync(d) && readdirSync(d).some((f) => f.endsWith(".jsonl"));
+}
+
+/** Start the herdr session if needed, in its folder, with Claude running in it (resuming if asked and possible). */
+export async function startSession(s: HSession, o: { resume?: boolean } = {}): Promise<string> {
+  const args = [SCRIPT, s.name, s.dir, "--claude"];
+  if (o.resume && hasConversation(s.dir)) args.push("--continue");
+  const { stdout } = await run("bash", args, { env: cleanEnv(), timeout: 60_000 });
   return stdout;
+}
+
+const TRUST = /Yes, I trust this folder/;
+
+async function claudePane(name: string, bin: string): Promise<string | null> {
+  const { stdout } = await run(bin, ["--session", name, "agent", "list"], { env: cleanEnv(), timeout: 10_000 });
+  const a = (JSON.parse(stdout)?.result?.agents ?? []).find((x: any) => x.agent === "claude");
+  return a?.pane_id ?? null;
+}
+
+async function screen(name: string, pane: string, bin: string): Promise<string> {
+  const { stdout } = await run(bin, ["--session", name, "pane", "read", pane, "--source", "visible"], { env: cleanEnv(), timeout: 10_000 });
+  return stdout;
+}
+
+/** Claude's "trust this folder?" screen is up in the session (new folder). Polls briefly: Claude takes a moment to draw it. */
+export async function trustPending(name: string, waitMs = 6000, bin = process.env.AGENT_DESK_HERDR_BIN || "herdr"): Promise<boolean> {
+  const until = Date.now() + waitMs;
+  for (;;) {
+    const pane = await claudePane(name, bin).catch(() => null);
+    if (pane && TRUST.test(await screen(name, pane, bin).catch(() => ""))) return true;
+    if (Date.now() > until) return false;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
+/** Answer "Yes, I trust this folder" (the user tapped Trust). Only acts while that screen is showing. */
+export async function acceptTrust(name: string, bin = process.env.AGENT_DESK_HERDR_BIN || "herdr"): Promise<void> {
+  const pane = await claudePane(name, bin);
+  if (!pane) throw new Error(`no Claude window in session ${name}`);
+  const sc = await screen(name, pane, bin);
+  if (!TRUST.test(sc)) throw new Error(`session ${name} is not asking to trust its folder`);
+  // Options: "❯ No, exit" then "Yes, I trust this folder". Move to Yes unless already there.
+  const onYes = /❯\s*Yes, I trust this folder/.test(sc);
+  await run(bin, ["--session", name, "pane", "send-keys", pane, ...(onYes ? [] : ["down"]), "enter"], { env: cleanEnv(), timeout: 10_000 });
 }
 
 export async function stopSession(name: string, bin = process.env.AGENT_DESK_HERDR_BIN || "herdr"): Promise<void> {

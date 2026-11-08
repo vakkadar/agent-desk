@@ -28,7 +28,7 @@ import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessio
 import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
 import { contextUsed } from "./context.js";
 import { LiveFollower } from "./live-follow.js";
-import { HerdrSessions, runningSessions, startSession, stopSession } from "./herdr-sessions.js";
+import { HerdrSessions, acceptTrust, runningSessions, startSession, stopSession, trustPending } from "./herdr-sessions.js";
 import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
@@ -49,6 +49,12 @@ const mux = await createMux(cfg);
 const hsessions = new HerdrSessions(cfg.dataDir);
 // Your live_sessions plus every named session opened from the desk.
 const liveClaude = new LiveClaude(() => [...cfg.liveSessions, ...hsessions.openNames()]);
+// Persistent sessions come back with the desk (reboot, restart), resuming Claude's last conversation.
+void (async () => {
+  const up = await runningSessions();
+  for (const s of hsessions.toRestore().filter((x) => !up.has(x.name)))
+    await startSession(s, { resume: true }).then(() => console.log(`[sessions] restored ${s.name}`), (e) => console.error(`[sessions] restore ${s.name} failed: ${e.message}`));
+})();
 const mcpSecret = randomUUID();
 // Claude gives up on an MCP tool call after ~60s by default, and the browser approval is
 // one: let it wait as long as the desk does.
@@ -296,7 +302,7 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       hsessions.verify(name, m.pin);
       const s = hsessions.get(name)!;
       if (!(await stat(s.dir).catch(() => null))?.isDirectory()) throw new Error(`folder missing: ${s.dir}`);
-      await startSession(s);
+      await startSession(s, { resume: true });
       let rec = store.list().find((r) => r.herdrSession === name);
       if (!rec) {
         const same = store.list().find((r) => r.kind === "local" && r.location === s.dir && !r.builtin && !r.herdrSession);
@@ -308,6 +314,22 @@ async function handleAction(m: any, send: (m: unknown) => void) {
       broadcastSources();
       void broadcastHSessions();
       send({ type: "focus", sourceId: rec.id, threadId: "ask" });
+      if (await trustPending(name)) send({ type: "hsession_trust", name, dir: s.dir });
+      return;
+    }
+    case "hsession_trust": {
+      // The user tapped "Trust folder": answer Claude's first-run question in that window.
+      const name = String(m.name);
+      hsessions.verify(name, m.pin);
+      await acceptTrust(name);
+      void broadcastHSessions();
+      return;
+    }
+    case "hsession_persist": {
+      const name = String(m.name);
+      hsessions.verify(name, m.pin);
+      hsessions.setPersistent(name, m.on === true);
+      void broadcastHSessions();
       return;
     }
     case "hsession_close": {

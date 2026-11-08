@@ -75,3 +75,17 @@ test("setPin clears or replaces; remove drops the entry", () => {
   assert.equal(r.get("s"), undefined);
   assert.throws(() => r.remove("s"), /no session named/);
 });
+
+test("persistent: restored at desk start unless the user closed it", () => {
+  const r = fresh();
+  r.register({ name: "keep", dir: "/x", persistent: true });
+  r.register({ name: "plain", dir: "/x" });
+  r.register({ name: "shut", dir: "/x" });
+  r.setPersistent("shut", true);
+  r.setState("shut", "closed");
+  assert.deepEqual(r.toRestore().map((s) => s.name), ["keep"]);
+  r.setState("keep", "open");
+  assert.deepEqual(r.toRestore().map((s) => s.name), ["keep"]);
+  r.setPersistent("keep", false);
+  assert.deepEqual(r.toRestore(), []);
+});

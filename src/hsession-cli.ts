@@ -1,5 +1,6 @@
 // agent-desk-session: register and manage named herdr sessions on the desk host.
-//   create <name> [dir] [--pin | --pin-stdin] [--no-start]
+//   create <name> [dir] [--pin | --pin-stdin] [--persistent] [--no-start]
+//   persist <name> [--off]   restart it whenever the desk starts (reboot), unless closed
 //   pin <name> [--clear | --pin-stdin]
 //   list
 //   close <name>      stop the herdr session (state -> closed)
@@ -40,13 +41,13 @@ async function main(argv: string[]): Promise<number> {
 
   switch (cmd) {
     case "create": {
-      if (!name) throw new Error("usage: create <name> [dir] [--pin | --pin-stdin] [--no-start]");
+      if (!name) throw new Error("usage: create <name> [dir] [--pin | --pin-stdin] [--persistent] [--no-start]");
       checkName(name);
       const dir = resolve((dirArg ?? `~/projects/${name}`).replace(/^~(?=$|\/)/, homedir()));
       const pin = flags.has("--pin-stdin") ? stdinPin() : flags.has("--pin") ? askPin() : undefined;
       spawnSync("mkdir", ["-p", dir]);
-      const s = reg.register({ name, dir, pin });
-      console.log(`registered ${name} (${s.state}) in ${dir}${pin ? ", PIN set" : ""}`);
+      const s = reg.register({ name, dir, pin, persistent: flags.has("--persistent") });
+      console.log(`registered ${name} (${s.state}) in ${dir}${pin ? ", PIN set" : ""}${s.persistent ? ", persistent" : ""}`);
       if (!flags.has("--no-start")) process.stdout.write(await startSession(s));
       console.log(`\nNext: in the desk, ⋯ menu → Sessions → Open ${name}  (or type: attach: ${name})`);
       return 0;
@@ -57,11 +58,17 @@ async function main(argv: string[]): Promise<number> {
       console.log(flags.has("--clear") ? `PIN cleared for ${name}` : `PIN set for ${name}`);
       return 0;
     }
+    case "persist": {
+      if (!name) throw new Error("usage: persist <name> [--off]");
+      reg.setPersistent(name, !flags.has("--off"));
+      console.log(`${name} ${flags.has("--off") ? "no longer persistent" : "persistent: restarted when the desk starts"}`);
+      return 0;
+    }
     case "list": {
       const up = await runningSessions();
       const rows = reg.list();
       if (!rows.length) console.log("no sessions");
-      for (const r of rows) console.log(`${r.name.padEnd(20)} ${r.state.padEnd(12)} ${up.has(r.name) ? "running" : "stopped"}  ${r.pinHash ? "PIN " : "    "} ${r.dir}`);
+      for (const r of rows) console.log(`${r.name.padEnd(20)} ${r.state.padEnd(12)} ${up.has(r.name) ? "running" : "stopped"}  ${r.pinHash ? "PIN " : "    "}${r.persistent ? "persistent " : "           "}${r.dir}`);
       return 0;
     }
     case "close": {
@@ -78,7 +85,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     default:
-      console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 7).join("\n").replace(/^\/\/ ?/gm, ""));
+      console.log(readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(0, 9).join("\n").replace(/^\/\/ ?/gm, ""));
       return cmd ? 2 : 0;
   }
 }

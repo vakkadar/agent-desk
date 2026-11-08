@@ -2,7 +2,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSchedules, showSchedules, renderSchedules } from "./schedule.js";
-import { initHSessions, showHSessions, renderHSessions, attachByName, onHSessionError, pinFor } from "./hsessions.js";
+import { initHSessions, showHSessions, renderHSessions, attachByName, onHSessionError, pinFor, onTrustNeeded } from "./hsessions.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
@@ -85,6 +85,8 @@ function onMsg(m: any) {
     renderSchedules(m.rows);
   } else if (m.type === "hsessions") {
     renderHSessions(m.rows);
+  } else if (m.type === "hsession_trust") {
+    onTrustNeeded(m.name, m.dir);
   } else if (m.type === "notes") {
     renderNotes(m.date, m.rows);
   } else if (m.type === "ls") {

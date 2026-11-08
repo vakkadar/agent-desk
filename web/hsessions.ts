@@ -56,10 +56,11 @@ export function showHSessions() {
   send({ type: "hsessions" });
 }
 
-function act(type: "hsession_open" | "hsession_close", name: string) {
+type Act = "hsession_open" | "hsession_close" | "hsession_trust" | "hsession_persist";
+function act(type: Act, name: string, extra: Record<string, unknown> = {}) {
   const r = rows.find((x) => x.name === name);
-  if (r?.pinned && !pinFor(name)) return askPin(name, type === "hsession_open" ? "Open" : "Close", () => act(type, name));
-  send({ type, name, pin: pinFor(name) });
+  if (r?.pinned && !pinFor(name)) return askPin(name, type.replace("hsession_", ""), () => act(type, name, extra));
+  send({ type, name, pin: pinFor(name), ...extra });
   body.querySelectorAll("button").forEach((b) => (b.disabled = true));
 }
 
@@ -96,7 +97,7 @@ export function renderHSessions(list: any[]) {
     const t = document.createElement("span");
     t.innerHTML = "<b></b><small></small>";
     const live = r.running === undefined ? "" : r.running ? " · running" : " · stopped";
-    t.querySelector("b")!.textContent = `${r.pinned ? "🔒 " : ""}${r.name}`;
+    t.querySelector("b")!.textContent = `${r.pinned ? "🔒 " : ""}${r.persistent ? "📌 " : ""}${r.name}`;
     t.querySelector("small")!.textContent = `${r.state}${live} · ${r.dir} · ${when(r.updatedAt)}`;
     const b = document.createElement("button");
     b.type = "button";
@@ -107,7 +108,31 @@ export function renderHSessions(list: any[]) {
       pending = opening ? r.name : null;
       act(opening ? "hsession_open" : "hsession_close", r.name);
     };
-    d.append(t, b);
+    const p = document.createElement("button");
+    p.type = "button";
+    p.textContent = r.persistent ? "📌 Unpin" : "📌 Keep";
+    p.title = "Persistent: restart this session whenever the desk starts (reboot), unless you closed it";
+    p.disabled = !canAct();
+    p.onclick = () => act("hsession_persist", r.name, { on: !r.persistent });
+    d.append(t, p, b);
     return d;
   }));
+}
+
+/** After Open: Claude is asking whether to trust the folder (first time there). */
+export function onTrustNeeded(name: string, dir: string) {
+  if (!dlg.open) dlg.showModal();
+  const d = document.createElement("div");
+  d.className = "srow trust";
+  const t = document.createElement("span");
+  t.innerHTML = "<b></b><small></small>";
+  t.querySelector("b")!.textContent = `Claude in ${name} asks to trust its folder`;
+  t.querySelector("small")!.textContent = `${dir} — it can read, edit and run files there`;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "primary";
+  b.textContent = "Trust folder";
+  b.onclick = () => { act("hsession_trust", name); d.remove(); };
+  d.append(t, b);
+  body.prepend(d);
 }

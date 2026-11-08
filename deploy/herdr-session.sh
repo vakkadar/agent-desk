@@ -2,11 +2,12 @@
 # Create (or restart) a named herdr session that opens in a project folder.
 # Run on the desk host (HP).
 #
-#   herdr-session <name> [dir] [--claude] [--desk]
+#   herdr-session <name> [dir] [--claude [--continue]] [--desk]
 #
 #   name      herdr session name, e.g. hora-raj
 #   dir       working folder (default ~/projects/<name>); created if missing
 #   --claude  start `claude` in the session's first pane
+#   --continue  with --claude: `claude --continue` (resume the folder's last conversation)
 #   --desk    add the session to live_sessions in desk.toml and restart agent-desk,
 #             so the desk can drive a Claude window open in it
 #
@@ -19,17 +20,18 @@
 set -euo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 
-claude=0 desk=0 args=()
+claude=0 desk=0 cont=0 args=()
 for a in "$@"; do
   case "$a" in
     --claude) claude=1 ;;
     --desk) desk=1 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    --continue) cont=1 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     -*) echo "unknown option: $a" >&2; exit 2 ;;
     *) args+=("$a") ;;
   esac
 done
-[ ${#args[@]} -ge 1 ] || { sed -n '2,18p' "$0"; exit 2; }
+[ ${#args[@]} -ge 1 ] || { sed -n '2,19p' "$0"; exit 2; }
 name=${args[0]}
 dir=${args[1]:-$HOME/projects/$name}
 dir=${dir/#\~/$HOME}
@@ -71,8 +73,8 @@ import json, sys; print(any(a.get("agent") == "claude" for a in json.load(sys.st
   if [ "$has" = True ]; then
     echo "claude already running in session $name"
   else
-    h pane run "$pane" claude >/dev/null
-    echo "claude started in $pane"
+    if [ $cont = 1 ]; then h pane run "$pane" claude --continue >/dev/null; else h pane run "$pane" claude >/dev/null; fi
+    echo "claude started in $pane$([ $cont = 1 ] && echo ' (continuing last conversation)')"
   fi
 fi
 
