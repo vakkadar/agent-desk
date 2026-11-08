@@ -24,7 +24,7 @@ export type AgentEvent =
   | { kind: "text"; text: string }
   | { kind: "tool_call"; id: string; name: string; input: unknown }
   | { kind: "tool_result"; id: string; output: string; isError?: boolean }
-  | { kind: "approval_request"; id: string; tool: string; input: unknown }
+  | { kind: "approval_request"; id: string; tool: string; input: unknown; options?: { key: string; label: string; allow: boolean }[] } // options: a live window's own prompt
   | { kind: "approval_result"; id: string; decision: "allow" | "deny"; by: string }
   | { kind: "state"; state: AgentState }
   | { kind: "usage"; tokensIn: number; tokensOut: number; costUsd?: number }

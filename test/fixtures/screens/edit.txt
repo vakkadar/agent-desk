@@ -1,0 +1,22 @@
+
+✻ Cogitated for 2s · done 9:57 PM
+
+❯ use the Edit tool to change hi to bye in /tmp/dl-proj/y.txt
+
+  Read 1 file
+
+● Update(y.txt)
+
+────
+ Edit file
+ y.txt
+╌╌╌╌
+ 1 -hi
+ 1 +bye
+╌╌╌╌
+ Do you want to make this edit to y.txt?
+ ❯ 1. Yes
+   2. Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)
+   3. No
+
+ Esc to cancel · Tab to amend
