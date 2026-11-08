@@ -4,6 +4,7 @@ import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
+import { initPush, togglePush, onPushKey } from "./push.js";
 import { initNotes, showNotes, renderNotes } from "./notes.js";
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector(s) as T;
@@ -52,10 +53,13 @@ function onMsg(m: any) {
     state.role = m.role;
     state.sources = m.sources;
     if (!state.sources.some((s) => s.id === state.source)) state.source = GENERAL;
+    openHash(location.hash);
     if (isGeneral()) state.mode = "ask";
     if (!$("main").classList.contains("paneled") && state.mode !== "notes") syncTabs();
     alertStatus(m.role === "action" ? "connected" : "read-only · tap to sign in", m.role === "action" ? "ok" : "");
     renderSources();
+  } else if (m.type === "push_key") {
+    onPushKey(m.key);
   } else if (m.type === "sources") {
     state.sources = m.sources;
     renderSources();
@@ -421,6 +425,18 @@ $("#status").addEventListener("click", () => {
 // Theme: auto (follow OS) → light → dark. Head script applies the saved choice before paint.
 const THEMES = ["auto", "light", "dark"];
 const THEME_LABEL: Record<string, string> = { auto: "◐ Auto", light: "☀ Light", dark: "☾ Dark" };
+// Alerts (Web Push); a tapped notification opens its thread via #source=..&thread=..
+function openHash(hash: string) {
+  const q = new URLSearchParams(hash.slice(1));
+  const src = q.get("source"), th = q.get("thread");
+  if (!src || !th || !state.sources.some((s) => s.id === src)) return;
+  state.source = src;
+  state.thread = th;
+  renderSources();
+}
+$("#pushBtn").onclick = () => togglePush();
+initPush($<HTMLButtonElement>("#pushBtn"), (m) => wsSend(m), openHash);
+
 const themeBtn = $<HTMLButtonElement>("#theme");
 let theme = localStorageGet("theme") ?? "auto";
 function applyTheme() {
