@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>agent-desk</title>
   <!-- Home-screen app (iPhone: Share → Add to Home Screen) -->
-  <link rel="manifest" href="./manifest.webmanifest" />
+  <!-- use-credentials: the manifest fetch must carry the Cloudflare Access cookie -->
+  <link rel="manifest" href="./manifest.webmanifest" crossorigin="use-credentials" />
   <link rel="icon" href="./icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="./icon-180.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
