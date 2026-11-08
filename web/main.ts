@@ -2,6 +2,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { initUsage, showUsage, onUsage } from "./usage.js";
 import { initSchedules, showSchedules, renderSchedules } from "./schedule.js";
+import { initHSessions, showHSessions, renderHSessions, attachByName, onHSessionError, pinFor } from "./hsessions.js";
 import { initSearch, showSearch, onSearch, type Hit } from "./search.js";
 type Ev = { seq: number; ts: string; sourceId: string; threadId: string; event: any };
 
@@ -82,6 +83,8 @@ function onMsg(m: any) {
     renderSources();
   } else if (m.type === "schedules") {
     renderSchedules(m.rows);
+  } else if (m.type === "hsessions") {
+    renderHSessions(m.rows);
   } else if (m.type === "notes") {
     renderNotes(m.date, m.rows);
   } else if (m.type === "ls") {
@@ -104,6 +107,7 @@ function onMsg(m: any) {
       e.hidden = false;
       lastSent = null;
     }
+    onHSessionError(String(m.error), () => promptForm.requestSubmit());
   }
 }
 
@@ -362,7 +366,8 @@ function sendText(text: string, attachments: string[] = []) {
   if (!state.source || (!state.thread && !isGeneral())) return alertStatus("pick a source and thread");
   $("#promptErr").hidden = true;
   lastSent = { text, at: Date.now() };
-  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments });
+  const hs = state.sources.find((s) => s.id === state.source)?.herdrSession;
+  act({ type: "prompt", sourceId: state.source, threadId: state.thread, text, attachments, pin: hs ? pinFor(hs) : undefined });
 }
 
 // ⋯ menu next to Send: Claude commands and the prefixes this box understands.
@@ -377,6 +382,7 @@ const MENU: { label: string; hint: string; run: () => void }[] = [
   } },
   { label: "c: <id> message", hint: "General: continue q-3 · Project: pick window w3", run: () => insert("c: ") },
   { label: "new: message", hint: "Project Ask: separate session, not your open window", run: () => insert("new: ") },
+  { label: "Sessions", hint: "named herdr sessions: open (attach) or close; attach: <name> works too", run: showHSessions },
   { label: "Schedules", hint: "scheduled prompts from desk.toml: next run, last run, run now", run: showSchedules },
   { label: "/<command>", hint: "any Claude command is passed as typed", run: () => insert("/") },
 ];
@@ -408,6 +414,7 @@ function toolGist(input: any): string {
 }
 
 initSchedules((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
+initHSessions((m) => state.ws?.send(JSON.stringify(m)), () => state.role === "action");
 
 function act(m: unknown) {
   if (state.role !== "action") return alertStatus("read-only");
@@ -679,6 +686,13 @@ const attach = initAttach(promptForm, {
 promptForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const ta = promptForm.elements.namedItem("text") as HTMLTextAreaElement;
+  const at = /^\s*attach:\s*(\S+)\s*$/i.exec(ta.value);
+  if (at) {
+    if (state.role !== "action") return alertStatus("read-only");
+    attachByName(at[1]);
+    ta.value = "";
+    return;
+  }
   if (!state.source || (!state.thread && !isGeneral()) || !ta.value.trim()) return alertStatus("pick a source and thread");
   const files = attach.take();
   if (!files) return;

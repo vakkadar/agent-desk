@@ -23,6 +23,12 @@ EOT
   echo "created $ENVF (edit token/data dir as needed)"
 fi
 
+# Named herdr sessions: herdr-session (start one in a folder) and agent-desk-session (register, PIN, list).
+mkdir -p "$HOME/.local/bin"
+install -m 755 deploy/herdr-session.sh "$HOME/.local/bin/herdr-session"
+printf '#!/bin/sh\nexec "%s" "%s/dist/hsession-cli.js" "$@"\n' "$NODE" "$REPO" > "$HOME/.local/bin/agent-desk-session"
+chmod 755 "$HOME/.local/bin/agent-desk-session"
+
 systemctl --user daemon-reload
 systemctl --user enable --now herdr.service agent-desk.service
 loginctl enable-linger "$USER"

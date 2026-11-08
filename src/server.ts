@@ -28,6 +28,7 @@ import { isSessionId, listSessions as listClaudeSessions } from "./claude-sessio
 import { parseExisting, GENERAL_ID, ensureGeneral, ensureGeneralHerdr, routeGeneral } from "./general.js";
 import { contextUsed } from "./context.js";
 import { LiveFollower } from "./live-follow.js";
+import { HerdrSessions, runningSessions, startSession, stopSession } from "./herdr-sessions.js";
 import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
@@ -45,7 +46,9 @@ async function admitted(req: IncomingMessage): Promise<boolean> {
 const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const mux = await createMux(cfg);
-const liveClaude = new LiveClaude(cfg.liveSessions);
+const hsessions = new HerdrSessions(cfg.dataDir);
+// Your live_sessions plus every named session opened from the desk.
+const liveClaude = new LiveClaude(() => [...cfg.liveSessions, ...hsessions.openNames()]);
 const mcpSecret = randomUUID();
 // Claude gives up on an MCP tool call after ~60s by default, and the browser approval is
 // one: let it wait as long as the desk does.
@@ -166,14 +169,31 @@ http.on("upgrade", async (req, sock, head) => {
 const busy = new Map<string, AbortController>(); // "source/thread" with a running turn
 const helloed = new Set<(m: unknown) => void>(); // senders of clients past "hello"
 // Show what happens in the user's Claude windows even when typed in the terminal (only while a browser is open).
-if (cfg.liveSessions.length)
-  new LiveFollower(
+new LiveFollower(
     liveClaude,
     () => store.list().filter((r) => r.id !== GENERAL_ID && r.kind !== "url"),
     (sourceId, event) => bus.publish({ sourceId, threadId: "ask", event }),
     (id) => helloed.size > 0 && !busy.has(`${id}/ask`),
   ).start();
 const broadcastSources = () => { for (const s of helloed) s({ type: "sources", sources: store.list() }); };
+const broadcastHSessions = async () => {
+  const rows = hsessions.rows4web(await runningSessions());
+  for (const s of helloed) s({ type: "hsessions", rows });
+};
+
+/** New source for a folder (or URL), with its base Ask thread. */
+async function newSource(location: string, name?: string): Promise<SourceRec> {
+  const id = slugify(name ?? location);
+  if (store.get(id)) throw new Error(`source ${id} exists`);
+  const cwd = sourceKind(location) === "local" ? location : cfg.dataDir;
+  const session = await agent.start({ cwd, name: `${id}-ask` });
+  const rec: SourceRec = {
+    id, kind: sourceKind(location), location, agent: agent.id,
+    threads: { ask: { id: "ask", mode: "ask", session, createdAt: new Date().toISOString() } },
+  };
+  await store.save(rec);
+  return rec;
+}
 
 function onClient(ws: WebSocket, req: IncomingMessage) {
   const ip = req.socket.remoteAddress ?? "";
@@ -208,6 +228,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       return;
     }
     if (role && m.type === "schedules") return send({ type: "schedules", rows: scheduler.rows() });
+    if (role && m.type === "hsessions") return send({ type: "hsessions", rows: hsessions.rows4web(await runningSessions()) });
     if (role && (m.type === "usage" || m.type === "search")) {
       await bus.flush();
       const evs = await readJournal(join(cfg.dataDir, ".index", "events.jsonl"));
@@ -265,16 +286,36 @@ async function handleAction(m: any, send: (m: unknown) => void) {
         location = expandHome(location).replace(/\/+$/, "") || "/";
         if (!(await stat(location).catch(() => null))?.isDirectory()) throw new Error(`not a directory: ${location}`);
       }
-      const id = slugify(m.name ?? location);
-      if (store.get(id)) throw new Error(`source ${id} exists`);
-      const cwd = sourceKind(location) === "local" ? location : cfg.dataDir;
-      const session = await agent.start({ cwd, name: `${id}-ask` });
-      const rec: SourceRec = {
-        id, kind: sourceKind(location), location, agent: agent.id,
-        threads: { ask: { id: "ask", mode: "ask", session, createdAt: new Date().toISOString() } },
-      };
-      await store.save(rec);
+      await newSource(location, m.name);
       broadcastSources();
+      return;
+    }
+    case "hsession_open": {
+      // Named herdr session: check PIN, start it (and Claude) if needed, bind a source to it.
+      const name = String(m.name);
+      hsessions.verify(name, m.pin);
+      const s = hsessions.get(name)!;
+      if (!(await stat(s.dir).catch(() => null))?.isDirectory()) throw new Error(`folder missing: ${s.dir}`);
+      await startSession(s);
+      let rec = store.list().find((r) => r.herdrSession === name);
+      if (!rec) {
+        const same = store.list().find((r) => r.kind === "local" && r.location === s.dir && !r.builtin && !r.herdrSession);
+        rec = same ?? (await newSource(s.dir, store.get(slugify(name)) ? `${name}-session` : name));
+        rec.herdrSession = name;
+        await store.save(rec);
+      }
+      hsessions.setState(name, "open");
+      broadcastSources();
+      void broadcastHSessions();
+      send({ type: "focus", sourceId: rec.id, threadId: "ask" });
+      return;
+    }
+    case "hsession_close": {
+      const name = String(m.name);
+      hsessions.verify(name, m.pin);
+      await stopSession(name);
+      hsessions.setState(name, "closed");
+      void broadcastHSessions();
       return;
     }
     case "sessions": {
@@ -384,13 +425,21 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
   // Project Ask: go into the Claude window already open in that folder (one conversation
   // per folder). "new:" skips it; "c: w3" picks a window when several are open.
   let live: LivePane | undefined;
-  if (rec.id !== GENERAL_ID && th.id === "ask" && !opts.noLive && cfg.liveSessions.length) {
+  const bound = rec.herdrSession ? hsessions.get(rec.herdrSession) : undefined;
+  if (rec.herdrSession && !opts.noLive) {
+    // A named session's source: PIN on every browser prompt, and only while the session is open.
+    // (Scheduled runs use the desk's own session and skip this.)
+    if (!bound) throw new Error(`session ${rec.herdrSession} is no longer registered`);
+    hsessions.verify(bound.name, m.pin);
+    if (bound.state !== "open") throw new Error(`session ${bound.name} is ${bound.state}; open it from Sessions (⋯ menu)`);
+  }
+  if (rec.id !== GENERAL_ID && th.id === "ask" && !opts.noLive && (cfg.liveSessions.length || bound)) {
     const raw = String(m.text ?? "");
     const nw = /^\s*new:[ \t]*/i.exec(raw);
     if (nw) m.text = raw.slice(nw[0].length).trim();
     else {
       const ex = parseExisting(raw);
-      const panes = await liveClaude.find(rec.location);
+      const panes = await liveClaude.find(rec.location, bound ? [bound.name] : undefined);
       const pick = pickLive(panes, ex?.query);
       if (ex) {
         if (pick.kind === "none") throw new Error(`no open Claude window in ${rec.location} matches "${ex.query}"${panes.length ? `. Open:\n${listPanes(panes)}` : ""}`);

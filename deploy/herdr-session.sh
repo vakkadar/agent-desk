@@ -65,8 +65,15 @@ else
 fi
 
 if [ $claude = 1 ]; then
-  h pane run "$pane" claude >/dev/null
-  echo "claude started in $pane"
+  # Never type "claude" into a pane that already runs it.
+  has=$(h agent list | python3 -c '
+import json, sys; print(any(a.get("agent") == "claude" for a in json.load(sys.stdin)["result"]["agents"]))')
+  if [ "$has" = True ]; then
+    echo "claude already running in session $name"
+  else
+    h pane run "$pane" claude >/dev/null
+    echo "claude started in $pane"
+  fi
 fi
 
 if [ $desk = 1 ]; then

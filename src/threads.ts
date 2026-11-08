@@ -20,6 +20,7 @@ export interface SourceRec {
   agent: string;
   threads: Record<string, ThreadRec>; // "ask" is the base session
   builtin?: boolean; // General: created by the desk, not attached by the user
+  herdrSession?: string; // opened from a named herdr session (herdr-sessions.ts): prompts go to its Claude window
 }
 
 export class ThreadStore {

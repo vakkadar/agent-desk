@@ -48,7 +48,12 @@ export class LiveClaude {
   private owned = new Set<string>(); // transcripts a desk-started turn is following right now
   readonly offsets = new Offsets(); // where background following stopped reading
 
-  constructor(private sessions: string[] = ["default"], private bin = process.env.AGENT_DESK_HERDR_BIN || "herdr", private root?: string) {}
+  /** sessions: fixed list, or a function so named sessions opened later are included. */
+  constructor(private sessionsIn: string[] | (() => string[]) = ["default"], private bin = process.env.AGENT_DESK_HERDR_BIN || "herdr", private root?: string) {}
+
+  private get sessions(): string[] {
+    return typeof this.sessionsIn === "function" ? this.sessionsIn() : this.sessionsIn;
+  }
 
   async cli(session: string, args: string[]): Promise<any> {
     const { stdout } = await run(this.bin, ["--session", session, ...args], { timeout: 15_000, env: cleanEnv() });
@@ -56,10 +61,10 @@ export class LiveClaude {
     try { return JSON.parse(t); } catch { return t; }
   }
 
-  /** Claude windows whose folder is exactly `cwd`. Herdr down or session missing → none. */
-  async find(cwd: string): Promise<LivePane[]> {
+  /** Claude windows whose folder is exactly `cwd` (in `only` sessions, if given). Herdr down or session missing → none. */
+  async find(cwd: string, only?: string[]): Promise<LivePane[]> {
     const out: LivePane[] = [];
-    for (const s of this.sessions) {
+    for (const s of only ?? this.sessions) {
       let r: any;
       try { r = await this.cli(s, ["agent", "list"]); } catch { continue; }
       for (const a of r?.result?.agents ?? []) {
