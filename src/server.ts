@@ -36,6 +36,7 @@ import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
+import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -73,6 +74,14 @@ function profileOf(req: IncomingMessage) {
 function featuresFor(req: IncomingMessage): Set<Feature> {
   return featuresOf(profileOf(req));
 }
+
+/** The desk's own code (any source inside its repo) is for the admin profile only. */
+const seesSelf = (features: Set<Feature>) => features.has("self");
+const sourcesFor = (features: Set<Feature>) => store.list().filter((r) => seesSelf(features) || !isSelfSource(r));
+const eventFor = (features: Set<Feature>, sourceId: string) => seesSelf(features) || !isSelfSource(store.get(sourceId));
+const hsessionsFor = <T extends { name: string; dir: string }>(features: Set<Feature>, rows: T[]) =>
+  seesSelf(features) ? rows : rows.filter((r) => r.name !== cfg.selfDevSession && !insideRepo(r.dir));
+const selfSession = (name: string) => name === cfg.selfDevSession || insideRepo(hsessions.get(name)?.dir ?? "/nonexistent-dir");
 
 /** guest_ask: a read-only connection may ask a browser-side target (the call runs on the
  *  guest's own sign-in there) as a new or picked General question. Nothing else. */
@@ -117,6 +126,14 @@ await push.init();
 push.attach(bus);
 await store.load();
 await ensureGeneral(store, agent, cfg.generalDir);
+if (cfg.selfDev && !store.get(DESK_DEV_ID)) {
+  // Desk dev: the desk's own repo as a source (admin profile only).
+  const session = await agent.start({ cwd: DESK_REPO, name: `${DESK_DEV_ID}-ask` });
+  await store.save({ id: DESK_DEV_ID, kind: "local", location: DESK_REPO, agent: agent.id, builtin: true,
+    threads: { ask: { id: "ask", mode: "ask", session, createdAt: new Date().toISOString() } } });
+}
+// The desk's own code: every tool use asks for approval unless desk.toml says otherwise.
+cfg.permissionMode[DESK_DEV_ID] ??= "default";
 if (mux.herdr) {
   // Keep an interactive Claude open in the General herdr session; restart it if it exits.
   const keepGeneral = () => ensureGeneralHerdr(cfg.dataDir, cfg.generalDir).catch((e) => console.warn("[general] herdr session:", e.message));
@@ -161,7 +178,10 @@ const http = createServer(async (req, res) => {
   if (handleUploadHttp(req, res, {
     role: (r, token) => roleOf(r, token),
     sameOrigin,
-    folder: (id) => store.get(id)?.location,
+    folder: (id, req) => {
+      const rec = store.get(id);
+      return isSelfSource(rec) && !seesSelf(featuresFor(req)) ? undefined : rec?.location;
+    },
   })) return;
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" });
@@ -170,7 +190,8 @@ const http = createServer(async (req, res) => {
   }
   if (req.url === "/pty/sessions") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(await listSessions()));
+    const f = featuresFor(req);
+    res.end(JSON.stringify((await listSessions()).filter((n) => seesSelf(f) || !selfSession(n))));
     return;
   }
   const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
@@ -207,14 +228,20 @@ http.on("upgrade", async (req, sock, head) => {
   }
   if ((req.url ?? "").split("?")[0] === "/pty") {
     ptyWss.handleUpgrade(req, sock, head, (ws) =>
-      onPtyClient(ws, req, { resolveRole: (token) => (featuresFor(req).has("terminal") ? roleOf(req, token) : null) }));
+      onPtyClient(ws, req, {
+        resolveRole: (token) => {
+          const f = featuresFor(req);
+          const name = new URL(req.url ?? "", "http://x").searchParams.get("session") ?? "";
+          return f.has("terminal") && (seesSelf(f) || !selfSession(name)) ? roleOf(req, token) : null;
+        },
+      }));
     return;
   }
   wss.handleUpgrade(req, sock, head, (ws) => onClient(ws, req));
 });
 
 const busy = new Map<string, AbortController>(); // "source/thread" with a running turn
-const helloed = new Set<(m: unknown) => void>(); // senders of clients past "hello"
+const helloed = new Map<(m: unknown) => void, Set<Feature>>(); // senders of clients past "hello", with their features
 // Show what happens in the user's Claude windows even when typed in the terminal (only while a browser is open).
 new LiveFollower(
     liveClaude,
@@ -222,10 +249,10 @@ new LiveFollower(
     (sourceId, event) => bus.publish({ sourceId, threadId: "ask", event }),
     (id) => helloed.size > 0 && !busy.has(`${id}/ask`),
   ).start();
-const broadcastSources = () => { for (const s of helloed) s({ type: "sources", sources: store.list() }); };
+const broadcastSources = () => { for (const [s, f] of helloed) s({ type: "sources", sources: sourcesFor(f) }); };
 const broadcastHSessions = async () => {
   const rows = hsessions.rows4web(await runningSessions());
-  for (const s of helloed) s({ type: "hsessions", rows });
+  for (const [s, f] of helloed) s({ type: "hsessions", rows: hsessionsFor(f, rows) });
 };
 
 /** New source for a folder (or URL), with its base Ask thread. */
@@ -270,20 +297,21 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       if (!role) return ws.close(4003, "forbidden");
       const profile = profileOf(req);
       features = featuresOf(profile);
-      send({ type: "welcome", role, keyword: cfg.keyword, profile, features: [...features], guestAsk: cfg.profiles.guestAsk, targets: cfg.askTargets.map(publicTarget), sources: store.list() });
-      for (const e of bus.since(Number(m.lastSeq) || 0)) send({ type: "event", e });
+      send({ type: "welcome", role, keyword: cfg.keyword, profile, features: [...features], guestAsk: cfg.profiles.guestAsk, targets: cfg.askTargets.map(publicTarget), sources: sourcesFor(features) });
+      const f = features;
+      for (const e of bus.since(Number(m.lastSeq) || 0)) if (eventFor(f, e.sourceId)) send({ type: "event", e });
       unsub();
-      unsub = bus.subscribe((e) => send({ type: "event", e }));
-      helloed.add(send);
+      unsub = bus.subscribe((e) => eventFor(f, e.sourceId) && send({ type: "event", e }));
+      helloed.set(send, f);
       return;
     }
     if (role && m.type === "schedules") return send({ type: "schedules", rows: scheduler.rows() });
-    if (role && m.type === "hsessions") return send({ type: "hsessions", rows: hsessions.rows4web(await runningSessions()) });
+    if (role && m.type === "hsessions") return send({ type: "hsessions", rows: hsessionsFor(features, hsessions.rows4web(await runningSessions())) });
     if (role && (m.type === "usage" || m.type === "search")) {
       await bus.flush();
       const evs = await readJournal(join(cfg.dataDir, ".index", "events.jsonl"));
-      if (m.type === "usage") send({ type: "usage", ...aggregateUsage(evs, m.range) });
-      else send({ type: "search", q: m.q, hits: searchEvents(evs, String(m.q ?? "")) });
+      if (m.type === "usage") send({ type: "usage", ...aggregateUsage(evs.filter((e) => eventFor(features, e.sourceId)), m.range) });
+      else send({ type: "search", q: m.q, hits: searchEvents(evs.filter((e) => eventFor(features, e.sourceId)), String(m.q ?? "")) });
       return;
     }
     if (role !== "action" && !guestAskOk(m)) return send({ type: "error", error: "read-only connection" });
@@ -299,6 +327,9 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
 
 async function handleAction(m: any, send: (m: unknown) => void, features: Set<Feature>) {
   if (String(m.type).startsWith("hsession_")) needFeature(features, "sessions");
+  if (m.sourceId != null && isSelfSource(store.get(String(m.sourceId)))) needFeature(features, "self");
+  if (m.type === "attach" && sourceKind(String(m.location ?? "")) === "local" && insideRepo(expandHome(String(m.location).trim()))) needFeature(features, "self");
+  if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
   switch (m.type) {
     case "ls": {
@@ -410,7 +441,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
       } else session = await agent.fork(rec.threads.ask.session);
       rec.threads[id] = { id, mode, session, createdAt: new Date().toISOString() };
       await store.save(rec);
-      send({ type: "sources", sources: store.list() });
+      send({ type: "sources", sources: sourcesFor(features) });
       return;
     }
     case "prompt":
@@ -560,6 +591,13 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
     const used = sid ? await contextUsed(live?.cwd ?? th.session.cwd, sid).catch(() => undefined) : undefined;
     if (used) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "context", used, limit: cfg.contextLimit } });
   } finally {
+    if (isSelfSource(rec)) {
+      // The desk's own code: commit what the turn changed (push stays manual).
+      const said = (t: string) => bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: `\n\n_${t}_` } });
+      await commitTurn(rec.location, text, th.id)
+        .then((h) => h && said(`committed ${h} in ${rec.location} (not pushed)`))
+        .catch((e) => said(`commit failed: ${e.message}`));
+    }
     busy.delete(key);
     await store.save(rec); // persists session id assigned on fork
   }

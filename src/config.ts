@@ -37,6 +37,10 @@ export interface DeskConfig {
   askTargets: AskTarget[];
   /** Who gets which features (profile, [profile_by_email]). */
   profiles: ProfileConfig;
+  /** self_dev: add a "Desk dev" source for the desk's own repo (admin profile only). */
+  selfDev: boolean;
+  /** herdr session name the desk's own dev Claude runs in (terminal: admin only). */
+  selfDevSession: string;
   /** Context window in tokens, for the /compact hint (context_limit). */
   contextLimit: number;
   /** Scheduled prompts ([[schedule]] in desk.toml). */
@@ -57,6 +61,8 @@ export const DEFAULTS: DeskConfig = {
   liveSessions: ["default"],
   askTargets: [],
   profiles: { profile: "everyday", guest: "everyday", byEmail: {}, guestAsk: false },
+  selfDev: false,
+  selfDevSession: "agent-desk-dev",
   contextLimit: 200_000,
   schedules: [],
 };
@@ -92,6 +98,8 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     liveSessions: raw.live_sessions ?? DEFAULTS.liveSessions,
     askTargets: parseTargets(raw),
     profiles: parseProfiles(raw),
+    selfDev: raw.self_dev === true,
+    selfDevSession: typeof raw.self_dev_session === "string" && raw.self_dev_session.trim() ? raw.self_dev_session.trim() : DEFAULTS.selfDevSession,
     contextLimit: raw.context_limit ?? DEFAULTS.contextLimit,
     schedules: lenientSchedules(raw.schedule),
   };

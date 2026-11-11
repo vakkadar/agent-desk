@@ -1,16 +1,18 @@
 // Profiles: which parts of the desk a person gets.
 //   everyday  — Ask, General, Notes, History, Web (+ Usage under Settings)
-//   developer — everything: also Design and Code threads, the terminal, herdr sessions
+//   developer — also Design and Code threads, the terminal, herdr sessions
+//   admin     — developer, plus the desk's own code (Desk dev source, self_dev)
 // desk.toml: `profile = "everyday"` (default), `guest_profile` (tunnel logins that are
 // neither owners nor listed; default everyday) and `[profile_by_email]` for one login.
 // The server enforces it (refuses those actions), the page only hides what it can't use.
 
-export type Feature = "design" | "code" | "terminal" | "sessions";
-export type Profile = "everyday" | "developer";
+export type Feature = "design" | "code" | "terminal" | "sessions" | "self";
+export type Profile = "everyday" | "developer" | "admin";
 
 export const PROFILES: Record<Profile, Feature[]> = {
   everyday: [],
   developer: ["design", "code", "terminal", "sessions"],
+  admin: ["design", "code", "terminal", "sessions", "self"],
 };
 
 export const isProfile = (p: unknown): p is Profile => typeof p === "string" && p in PROFILES;
@@ -44,5 +46,5 @@ export const featuresOf = (p: Profile) => new Set<Feature>(PROFILES[p]);
 
 /** Throws when the profile doesn't include the feature an action needs. */
 export function needFeature(features: Set<Feature>, f: Feature): void {
-  if (!features.has(f)) throw new Error(`${f} is not part of your profile (developer profile needed)`);
+  if (!features.has(f)) throw new Error(f === "self" ? "the desk's own code is for the admin profile only" : `${f} is not part of your profile (developer profile needed)`);
 }

@@ -63,7 +63,7 @@ export interface UploadHttp {
   role(req: IncomingMessage, token: string | undefined): string | null;
   sameOrigin(req: IncomingMessage): boolean;
   /** Folder of a source (General: generalDir; project: its location). */
-  folder(sourceId: string): string | undefined;
+  folder(sourceId: string, req: IncomingMessage): string | undefined;
 }
 
 /** POST /upload?source=<id> (raw body, x-desk-name) and GET /uploads/<source>/<date>/<file>. Returns true if handled. */
@@ -74,7 +74,7 @@ export function handleUploadHttp(req: IncomingMessage, res: ServerResponse, h: U
   };
   if (req.method === "POST" && url.pathname === "/upload") {
     const token = req.headers["x-desk-token"];
-    const folder = h.folder(url.searchParams.get("source") ?? "");
+    const folder = h.folder(url.searchParams.get("source") ?? "", req);
     if (!h.sameOrigin(req) || h.role(req, typeof token === "string" ? token : undefined) !== "action") end(403, { error: "forbidden" });
     else if (!folder) end(404, { error: "no such source" });
     else if (Number(req.headers["content-length"] ?? 0) > MAX_FILE) end(413, { error: "file too large (20 MB max)" });
@@ -101,7 +101,7 @@ export function handleUploadHttp(req: IncomingMessage, res: ServerResponse, h: U
   }
   const m = req.method === "GET" && /^\/uploads\/([^/]+)\/(.+)$/.exec(url.pathname);
   if (m) {
-    const folder = h.folder(decodeURIComponent(m[1]));
+    const folder = h.folder(decodeURIComponent(m[1]), req);
     const f = folder && servedFile(folder, decodeURIComponent(m[2]));
     if (!f) end(404);
     else readFile(f.file).then((b) => res.writeHead(200, { "content-type": f.type, "x-content-type-options": "nosniff", "cache-control": "private, max-age=3600" }).end(b), () => end(404));

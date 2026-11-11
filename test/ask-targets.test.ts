@@ -13,7 +13,7 @@ test("profiles: default everyday, per-email override, bad names refused", () => 
   assert.ok(featuresOf("developer").has("terminal"));
   assert.equal(featuresOf("everyday").size, 0);
   assert.throws(() => needFeature(featuresOf("everyday"), "code"), /not part of your profile/);
-  assert.throws(() => parseProfiles({ profile: "admin" }), /profile must be one of/);
+  assert.throws(() => parseProfiles({ profile: "superuser" }), /profile must be one of/);
   const d = parseProfiles({ profile: "developer", profile_by_email: { "me@x.com": "developer", "g@x.com": "everyday" } });
   assert.equal(profileFor(d, undefined), "developer"); // localhost keeps the desk default
   assert.equal(profileFor(d, "new@x.com", true), "everyday"); // unlisted tunnel guest

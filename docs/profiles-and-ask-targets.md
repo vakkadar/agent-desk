@@ -8,6 +8,7 @@ Two settings in `~/agent-desk-data/desk.toml` shape the desk for the people usin
 |---|---|---|
 | `everyday` (default) | Ask, General, Notes, History, Web; Settings → Usage | — |
 | `developer` | the same, plus Settings → Design, Code | Terminal, herdr Sessions (`attach:`) |
+| `admin` | the same as developer, plus the **desk-dev** source | the desk's own code (`self_dev`) |
 
 ```toml
 profile = "everyday"                 # everyone, unless listed below
@@ -22,6 +23,28 @@ guest_ask = true                     # read-only guests may ask browser-side tar
 Connections without an Access login (localhost, LAN) get `profile`. A login over the
 tunnel that is not in `owners` and not listed gets `guest_profile`, so a newly admitted
 guest never gets more than you meant.
+
+### Admin: working on the desk itself (`self_dev`)
+
+```toml
+self_dev = true                      # add the desk-dev source (default false)
+self_dev_session = "agent-desk-dev"  # optional: herdr session its interactive Claude runs in
+[profile_by_email]
+"you@example.com" = "admin"
+```
+
+With `self_dev = true` the desk adds a **desk-dev** source for the repo it runs from, so
+you can ask, follow and approve Claude working on the desk's own code from the page.
+Each desk gets its own machine's copy of the repo.
+
+- Admin only: any source inside the desk's repo (desk-dev, or the folder attached by
+  hand) and the `self_dev_session` herdr session are hidden from other profiles, and the
+  desk refuses their prompts, attachments, terminal and sessions there.
+- Every tool use asks for approval (`permission_mode` `default`), unless
+  `[permission_mode] desk-dev = "…"` says otherwise.
+- When a turn ends, the desk commits whatever it changed (`Desk dev: <question>`) and
+  says so under the answer. It does not push: push from that machine when you are happy,
+  then pull elsewhere. Changes take effect after `npm run build` and a desk restart.
 
 ### Guests asking on a hub
 
