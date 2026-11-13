@@ -78,6 +78,12 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .brand i { width: 10px; height: 10px; border-radius: 3px; background: var(--acc); }
 .kbar { flex: 0 1 520px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); background: var(--sunk); border-radius: 8px; color: var(--mute); text-align: left; }
 .kbar > span:not(.kbd) { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.persp { display: inline-flex; border: 1px solid var(--line2); border-radius: 9px; padding: 2px; gap: 2px; background: var(--sunk); flex: none; }
+.persp button { border: 0; background: none; border-radius: 7px; height: 30px; padding: 0 12px; font-size: 13px; color: var(--mute); display: inline-flex; align-items: center; gap: 6px; }
+.persp button.on { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
+.persp button .n { font-size: 11px; color: var(--mute); font-weight: 500; }
+.app.p-ask .files, .app.p-ask .sash.h { display: none; }
+.app.p-design .right { --rw-default: 60%; }
 .need { position: relative; }
 .need b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--amber); color: #fff; font-size: 11px; display: grid; place-items: center; padding: 0 4px; }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); font-weight: 700; display: grid; place-items: center; border: 0; }
@@ -221,6 +227,8 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
   .files { display: none !important; }
   .crow .pfx { display: none; } .crow .send { flex: 1; }
   .need { min-width: 40px; justify-content: center; padding: 0 10px; }
+  .persp { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 7; box-shadow: var(--pop); }
+  body.thread-open .persp { display: none; }
 }
 </style>
 </head>
@@ -229,6 +237,7 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
   <button class="ib only-phone" id="backBtn" title="Back to list" aria-label="Back">‹</button>
   <button class="ib no-phone" data-act="toggleLeft" title="Toggle list (Ctrl+B)" aria-label="Toggle list">☰</button>
   <div class="brand no-phone"><i></i>Desk</div>
+  <div class="persp dev" id="persp" role="tablist" aria-label="Perspective"></div>
   <button class="kbar" id="kbar" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search, jump, web, command</span><span class="kbd">Ctrl K</span></button>
   <button class="btn need" data-act="needs" type="button"><span class="no-phone">Needs you</span><span class="only-phone" style="font-weight:600">!</span><b id="needN">2</b></button>
   <button class="avatar" data-menu="me" type="button" title="Profile, theme, settings">R</button>
@@ -275,6 +284,7 @@ const THREADS = {
     { id: "code-5", title: "events.subscribe instead of polling", state: "working", age: "now", kind: "code", ctx: 31, tok: "41k" },
     { id: "code-4", title: "Settings repo split", state: "blocked", age: "5m", kind: "code", ctx: 52, tok: "92k" },
     { id: "design-1", title: "Review line in the builder turn", state: "done", age: "31m", kind: "design", ctx: 40, tok: "63k" },
+    { id: "design-2", title: "Phone inbox", state: "working", age: "now", kind: "design", ctx: 22, tok: "19k" },
   ],
   sanatana: [{ id: "code-1", title: "Hub /api/ask streaming", state: "idle", age: "3d", kind: "code", ctx: 22, tok: "77k" }],
   "desk-dev": [{ id: "dev-1", title: "Restart gate after tests", state: "working", age: "now", kind: "code", ctx: 18, tok: "28k" }],
@@ -290,7 +300,8 @@ const FILES = {
   ],
   "code-5": [{ path: "src/live.ts", st: "M", a: 41, d: 57 }, { path: "test/live.test.ts", st: "M", a: 22, d: 6 }],
   "code-4": [{ path: "src/config.ts", st: "M", a: 26, d: 9 }, { path: "test/config.test.ts", st: "M", a: 14, d: 0 }],
-  "design-1": [{ path: "design/review-line.html", st: "A", a: 140, d: 0, design: true }, { path: "design/notes/review-line.md", st: "A", a: 38, d: 0 }],
+  "design-1": [{ path: "design/review-line.html", st: "A", a: 140, d: 0, design: true }, { path: "design/review-line-dark.html", st: "A", a: 12, d: 0, design: true }, { path: "design/notes/review-line.md", st: "A", a: 38, d: 0 }],
+  "design-2": [{ path: "design/phone-inbox.html", st: "A", a: 96, d: 0, design: true }, { path: "design/notes/phone-inbox.md", st: "A", a: 20, d: 0 }],
   "code-1": [{ path: "src/hub/ask.ts", st: "M", a: 30, d: 12 }],
   "dev-1": [{ path: "src/restart.ts", st: "A", a: 54, d: 0 }, { path: "test/restart.test.ts", st: "A", a: 40, d: 0 }],
 };
@@ -304,7 +315,9 @@ const LEVELS = { everyday: "Everyday", developer: "Developer", power: "Power dev
 // ================= state =================
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem("d2." + k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem("d2." + k, JSON.stringify(v)); } catch {} };
-const S = Object.assign({ level: "power", deskDev: true, place: "agent-desk", thread: "code-3", left: true, file: null, fileMode: "diff", diffBase: "branch", filesMin: false, closed: {}, target: "This desk", builderModel: "Sonnet 5.5", reviewModel: "Opus 5.5", lw: 272, rw: 540, fh: 260 }, load("s", {}));
+const PERSP = { ask: { label: "Ask", key: "1" }, design: { label: "Design", key: "2" }, code: { label: "Code", key: "3" } };
+const kindOf = (t) => (!t.kind || t.kind === "ask" ? "ask" : t.kind);
+const S = Object.assign({ persp: "code", layouts: {}, level: "power", deskDev: true, place: "agent-desk", thread: "code-3", left: true, file: null, fileMode: "diff", diffBase: "branch", filesMin: false, closed: {}, target: "This desk", builderModel: "Sonnet 5.5", reviewModel: "Opus 5.5", lw: 272, rw: 540, fh: 260 }, load("s", {}));
 S.dispute = null; S.view = "thread";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -323,11 +336,14 @@ function renderTree() {
   if (NEEDS.length) h += `<div class="grp">Needs you <span class="pill p-amber">${NEEDS.length}</span></div>` +
     NEEDS.map((n) => `<button class="row need-row" data-go="${n.place}|${n.thread}"><span class="dot s-blocked"></span><span class="t"><span class="mono" style="font-weight:600">${n.thread}</span> ${esc(n.text)}</span></button>`).join("");
   for (const p of visiblePlaces()) {
+    if (p.kind === "general" && S.persp !== "ask") continue;
+    if (p.kind !== "general" && p.id !== S.place && !(THREADS[p.id] || []).some((t) => kindOf(t) === S.persp)) continue;
     const closed = S.closed[p.id];
     h += `<div class="grp ${closed ? "closed" : ""}"><button class="tg" data-tg="${p.id}">${esc(p.name)}</button>${p.deskdev ? '<span class="pill p-amber">desk dev</span>' : ""}<span class="mach dev">· ${p.machine}</span>
-      <button class="ib" data-new="${p.id}" title="${p.kind === "general" ? "New question" : "New thread"}">+</button></div>`;
+      <button class="ib" data-new="${p.id}" title="${p.kind === "general" ? "New question" : `New ${S.persp} thread`}">+</button></div>`;
+    if (!closed && !(THREADS[p.id] || []).some((t) => kindOf(t) === S.persp)) h += `<div class="mute" style="padding:2px 14px 6px 30px;font-size:12.5px">No ${S.persp} threads.</div>`;
     if (closed) continue;
-    h += (THREADS[p.id] || []).filter((t) => dv() || !t.kind || t.kind === "ask").map((t) =>
+    h += (THREADS[p.id] || []).filter((t) => kindOf(t) === S.persp).map((t) =>
       `<button class="row ${p.id === S.place && t.id === S.thread && S.view === "thread" ? "on" : ""}" data-go="${p.id}|${t.id}"><span class="dot s-${t.state}"></span><span class="id">${t.id}</span><span class="t">${esc(t.title)}</span><span class="m">${t.state === "blocked" ? '<span class="needs">!</span>' : t.age}</span></button>`).join("");
   }
   $("tree").innerHTML = h;
@@ -345,7 +361,7 @@ function renderFiles() {
 function composer(t) {
   const p = place(), general = p.kind === "general";
   const pfx = t ? `browser[${t.id}]:` : "browser:";
-  const modeChip = !t && !general && dv() ? `<span class="chip">New <select data-sel="newKind"><option>code</option><option>design</option><option>ask</option></select></span>` : "";
+  const modeChip = !t && !general && dv() ? `<span class="chip">New <b>${S.persp}</b> thread<input type="hidden" data-sel="newKind" value="${S.persp}"></span>` : "";
   const targetChip = general ? `<span class="chip">Run on <select data-sel="target">${TARGETS.map((x) => `<option ${x === S.target ? "selected" : ""}>${x}</option>`).join("")}</select></span>` : "";
   const running = t && t.state === "working", hiCtx = t && t.ctx >= 70;
   return `<div class="box"><div class="cbox">
@@ -379,7 +395,7 @@ function out(t) {
   const d = S.dispute;
   if (t.id !== "code-3") return `<div class="out">
     <div class="turn"><div class="who"><span class="dot s-${t.state}"></span><b>Builder</b><span class="dev">· Claude Code · ${S.builderModel}</span>${t.state === "blocked" ? '<span class="needs">· needs you</span>' : ""}</div>
-      <div class="body"><div>${t.state === "working" ? "Working: replacing the 700 ms poll in <code>live.ts</code> with one <code>hc events</code> stream…" : `Done with ${esc(t.title)}.`}</div>
+      <div class="body"><div>${t.kind === "design" ? (t.state === "working" ? "Drafting the phone inbox: approvals as full-width cards, Allow and Deny at thumb height, working threads as one line below. Preview is on the right." : `Done with ${esc(t.title)}. Two variants (light, dark) on the right.`) : t.state === "working" ? "Working: replacing the 700 ms poll in <code>live.ts</code> with one <code>hc events</code> stream…" : `Done with ${esc(t.title)}.`}</div>
       <details class="fold"><summary>${t.state === "working" ? "9 steps so far" : "21 steps · 4 edits · tests passed"}</summary><div class="fb"><div class="step"><span class="ok">✓</span>read src/live.ts</div><div class="step"><span class="ok">✓</span>edit src/live.ts</div></div></details>
       ${t.id === "code-4" ? `<div class="ask"><div>Move <code>desk.toml</code> into <code>~/agent-desk-settings</code> now, or keep a copy in the data repo for one release?</div><div class="acts"><button class="btn sm" data-act="answer">Move now</button><button class="btn sm" data-act="answer">Keep a copy</button></div></div>` : ""}</div></div>
     <div class="turn me"><div class="who">you <span class="mono dev">browser[${t.id}]</span></div><div class="body">${esc(t.title)}.</div></div></div>`;
@@ -440,7 +456,11 @@ function renderRight() {
     if (k === "@@") { const m = /-(\d+),\d+ \+(\d+)/.exec(x); if (m) { o = +m[1]; n = +m[2]; } return `<div class="hunk">@@ ${esc(x)}</div>`; }
     const a = k === "+", d = k === "-", ol = a ? "" : o++, nl = d ? "" : n++;
     return `<div class="ln ${a ? "add" : d ? "del" : ""}"><span>${ol}</span><span>${nl}</span><span class="sg">${a ? "+" : d ? "−" : " "}</span><span class="tx">${esc(x)}</span></div>`; }).join("")}</div>`;
-  const preview = `<div class="prev"><div style="display:flex;gap:8px;align-items:center"><span class="dot" style="background:var(--ok)"></span><b>Review · 3 findings · 2 fixed · 1 disputed</b></div><div class="mute" style="font-size:12.5px">Rendered design preview of ${esc(f.path)}.</div></div>`;
+  const preview = f.path.includes("phone") ? `<div style="display:grid;place-items:center;padding:18px"><div style="width:300px;border:8px solid var(--fg);border-radius:30px;padding:14px;background:var(--bg);display:flex;flex-direction:column;gap:10px">
+      <b style="font-size:13px">Needs you · 2</b>${["code-3 wants to run rm -rf …", "code-4 asks: move desk.toml?"].map((x) => `<div style="background:var(--card);border:1px solid var(--amber);border-radius:12px;padding:10px;font-size:12.5px;display:flex;flex-direction:column;gap:8px">${x}<div style="display:flex;gap:6px"><span class="btn pri sm" style="flex:1;justify-content:center">Allow</span><span class="btn sm" style="flex:1;justify-content:center">Deny</span></div></div>`).join("")}
+      <span class="mute" style="font-size:12px">working · code-5, design-2</span></div></div>`
+    : `<div class="prev"><div style="display:flex;gap:8px;align-items:center"><span class="dot" style="background:var(--ok)"></span><b>Review · Claude Code Opus 5.5: 3 findings · 2 fixed and re-checked · 1 disputed</b><span class="sp"></span><span class="mute">▸</span></div>
+      <div class="mute" style="font-size:12.5px">One line inside the builder's turn; expands to the findings.</div></div>`;
   $("right").innerHTML = `<div class="rhead"><button class="ib only-phone" data-act="closeFile" aria-label="Back">‹</button><span class="st ${f.st} mono" style="font-weight:700">${f.st}</span><span class="path">${esc(f.path)}</span>
       <span class="pill ${isSupport(f.path) ? "p-mute" : "p-ok"}">${isSupport(f.path) ? "supporting" : "output"}</span><button class="ib no-phone" data-act="closeFile" title="Close file">×</button></div>
     <div class="rhead" style="min-height:36px">${f.design ? `<div class="seg"><button class="${S.fileMode === "preview" ? "on" : ""}" data-fmode="preview">Preview</button><button class="${S.fileMode !== "preview" ? "on" : ""}" data-fmode="diff">Diff</button></div>` : ""}
@@ -455,7 +475,8 @@ function palData(q) {
   const out = [], ql = q.toLowerCase().trim();
   if (ql.startsWith("?")) return [{ k: "web", label: `Search the web for “${q.slice(1).trim()}”`, s: "new tab", run: () => toast("Opens Google in a new tab") }];
   const cmd = ql.startsWith(">"), qq = cmd ? ql.slice(1).trim() : ql;
-  const cmds = [["New code thread", "", () => newThread("code")], ["New design thread", "", () => newThread("design")], ["New question (General)", "", () => go("general", null)],
+  const cmds = [["Ask perspective", "Alt+1", () => switchPersp("ask")], ["Design perspective", "Alt+2", () => switchPersp("design")], ["Code perspective", "Alt+3", () => switchPersp("code")],
+    ["New code thread", "", () => { switchPersp("code"); newThread("code"); }], ["New design thread", "", () => { switchPersp("design"); newThread("design"); }], ["New question (General)", "", () => go("general", null)],
     ["Notes: today", "", () => view("notes")], ["Usage", "", () => view("usage")], ["Schedules", "", () => toast("Schedules list: next run, last run, run now")],
     ["Attach a project folder or URL", "", () => toast("Folder browser / URL")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
     ["Settings (folder backed up to GitHub)", "", () => toast("Opens settings")], ["Toggle light / dark", "", theme], ["Toggle list", "Ctrl+B", () => act("toggleLeft")]];
@@ -498,8 +519,34 @@ function menu(kind, anchor) {
 }
 const closeMenu = () => $("menu").classList.remove("on");
 
+// ================= perspectives (like Eclipse): same desk, arranged for one kind of work =================
+function renderPersp() {
+  const count = (k) => Object.values(THREADS).flat().filter((t) => kindOf(t) === k && t.state !== "idle" && t.state !== "done").length;
+  $("persp").innerHTML = Object.entries(PERSP).map(([k, v]) => `<button role="tab" class="${S.persp === k ? "on" : ""}" data-persp="${k}" title="${v.label} perspective (Alt+${v.key})">${v.label}${count(k) ? `<span class="n">${count(k)}</span>` : ""}</button>`).join("");
+}
+function switchPersp(k, keepTarget) {
+  if (k === S.persp) return;
+  S.layouts[S.persp] = { lw: S.lw, rw: S.rw, fh: S.fh, place: S.place, thread: S.thread, file: S.file };
+  S.persp = k;
+  const L = S.layouts[k];
+  if (L && !keepTarget) Object.assign(S, L);
+  else if (!keepTarget) {
+    S.rw = k === "design" ? Math.round(innerWidth * 0.5) : 540;
+    const first = visiblePlaces().flatMap((p) => (THREADS[p.id] || []).filter((t) => kindOf(t) === k).map((t) => [p.id, t.id]))[0];
+    [S.place, S.thread] = first ?? [k === "ask" ? "general" : "agent-desk", null]; S.file = null;
+  }
+  S.view = "thread"; S.dispute = null;
+  if (k === "design" && !S.file) autoPreview();
+  render();
+}
+// Design perspective opens the thread's main design output as a preview straight away.
+function autoPreview() { const t = thr(), f = t && (FILES[t.id] || []).find((x) => x.design); if (f && S.persp === "design") { S.file = f.path; S.fileMode = "preview"; } }
+
 // ================= actions =================
-function go(p, t) { S.place = p; S.thread = t; S.view = "thread"; S.file = null; S.dispute = null; S.closed[p] = false; pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
+function go(p, t) {
+  const th = t && (THREADS[p] || []).find((x) => x.id === t);
+  if (th && kindOf(th) !== S.persp) switchPersp(kindOf(th), true);
+  S.place = p; S.thread = t; S.view = "thread"; S.file = null; S.dispute = null; S.closed[p] = false; autoPreview(); pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
 function openThreadScreen(on) { $("app").classList.toggle("thread-open", on); document.body.classList.toggle("thread-open", on); }
 function newThread(kind) { go(S.place === "general" ? "agent-desk" : S.place, null); setTimeout(() => { const s = document.querySelector('[data-sel="newKind"]'); if (s) s.value = kind; $("msg")?.focus(); }, 0); }
 function view(v) { S.view = v; pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
@@ -533,11 +580,12 @@ function layout() {
   const app = $("app");
   app.classList.toggle("no-left", !S.left && !phone());
   app.style.setProperty("--lw", S.lw + "px"); app.style.setProperty("--rw", S.rw + "px"); $("left").style.setProperty("--fh", S.fh + "px");
+  ["ask", "design", "code"].forEach((k) => app.classList.toggle("p-" + k, S.persp === k));
   document.body.className = "lv-" + S.level + ($("app").classList.contains("thread-open") ? " thread-open" : "");
   $("needN").textContent = NEEDS.length;
   persist();
 }
-function render() { renderTree(); renderFiles(); renderMid(); renderRight(); layout(); }
+function render() { renderPersp(); renderTree(); renderFiles(); renderMid(); renderRight(); layout(); }
 
 // ================= events =================
 document.addEventListener("click", (e) => {
@@ -549,6 +597,7 @@ document.addEventListener("click", (e) => {
   if (el.id === "kbar") return pal(true);
   if (el.id === "backBtn") { if (S.file) { S.file = null; renderFiles(); return renderRight(); } openThreadScreen(false); return; }
   if (d.menu) return $("menu").classList.contains("on") ? closeMenu() : menu(d.menu, el);
+  if (d.persp) return switchPersp(d.persp);
   if (d.go) { const [p, t] = d.go.split("|"); return go(p, t); }
   if (d.tg) { S.closed[d.tg] = !S.closed[d.tg]; return renderTree(); }
   if (d.new) { return go(d.new, null); }
@@ -556,7 +605,7 @@ document.addEventListener("click", (e) => {
   if (d.fmode) { S.fileMode = d.fmode; return renderRight(); }
   if (d.base) { S.diffBase = d.base; toast(d.base === "branch" ? "Diff since the thread's branch left main" : "Diff since your last message"); return renderRight(); }
   if (d.dispute) { S.dispute = d.dispute; return renderMid(); }
-  if (d.level) { S.level = d.level; if (!dv() && S.place !== "general") { S.place = "general"; S.thread = "q-14"; } closeMenu(); return render(); }
+  if (d.level) { S.level = d.level; if (d.level === "everyday" && S.persp !== "ask") switchPersp("ask"); if (!dv() && S.place !== "general") { S.place = "general"; S.thread = "q-14"; } closeMenu(); return render(); }
   if (d.cmd) { closeMenu(); if (d.cmd === "/<command>") { const ta = $("msg"); ta.value = "/" + ta.value; return ta.focus(); } return toast(`${d.cmd} sent as typed`); }
   if (d.pfx) { closeMenu(); const ta = $("msg"); if (!ta.value.startsWith(d.pfx)) ta.value = d.pfx + ta.value; return ta.focus(); }
   if (d.pi) return palItems[+d.pi].run();
@@ -572,6 +621,7 @@ $("palIn").addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   const c = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (c && k === "k") { e.preventDefault(); pal(!$("pal").classList.contains("on")); }
+  else if (e.altKey && ["1", "2", "3"].includes(e.key) && dv()) { e.preventDefault(); switchPersp({ 1: "ask", 2: "design", 3: "code" }[e.key]); }
   else if (c && k === "b") { e.preventDefault(); act("toggleLeft"); }
   else if (e.key === "Escape") { pal(false); closeMenu(); if (S.file) { S.file = null; renderFiles(); renderRight(); } }
   else if (e.key === "/" && !e.target.closest("textarea, input")) { e.preventDefault(); $("msg")?.focus(); }
@@ -590,6 +640,7 @@ document.addEventListener("pointerdown", (e) => {
   if (q.get("level")) S.level = q.get("level");
   if (q.get("place")) { S.place = q.get("place"); S.thread = q.get("thread"); }
   if (q.get("file")) S.file = q.get("file");
+  if (q.get("persp")) { S.persp = q.get("persp"); if (S.persp === "design") { S.rw = Math.round(innerWidth * 0.5); autoPreview(); } }
   if (q.get("open") && phone()) openThreadScreen(true); }
 render();
 </script>
