@@ -16,6 +16,7 @@
   --ok: #1f9d55; --ok-soft: rgba(31,157,85,.12); --warn: #c93c3c; --warn-soft: rgba(201,60,60,.1);
   --amber: #b45309; --amber-soft: rgba(180,83,9,.12); --blue: #2563eb; --blue-soft: rgba(37,99,235,.1);
   --term: #0f1218; --term-fg: #d6dae3; --status: #4f46e5; --status-fg: #fff;
+  --add-bg: #e6f6ea; --add-fg: #116b37; --del-bg: #fdeceb; --del-fg: #a12a2a;
   --shadow: 0 1px 2px rgba(16,18,24,.05), 0 2px 8px rgba(16,18,24,.04); --pop: 0 12px 40px rgba(16,18,24,.18);
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -27,6 +28,7 @@
   --acc: #8b8df9; --acc-fg: #0e1014; --acc-soft: rgba(139,141,249,.14);
   --ok: #4ade80; --ok-soft: rgba(74,222,128,.12); --warn: #f07070; --warn-soft: rgba(240,112,112,.12);
   --amber: #fbbf24; --amber-soft: rgba(251,191,36,.12); --blue: #60a5fa; --blue-soft: rgba(96,165,250,.12);
+  --add-bg: rgba(46,160,67,.18); --add-fg: #7ee2a0; --del-bg: rgba(248,81,73,.15); --del-fg: #ffa198;
   --term: #0a0c10; --status: #2a2c55; --status-fg: #e5e7eb; --shadow: 0 1px 2px rgba(0,0,0,.4); --pop: 0 12px 40px rgba(0,0,0,.6);
 }
 @media (prefers-color-scheme: dark) {
@@ -37,7 +39,8 @@
     --acc: #8b8df9; --acc-fg: #0e1014; --acc-soft: rgba(139,141,249,.14);
     --ok: #4ade80; --ok-soft: rgba(74,222,128,.12); --warn: #f07070; --warn-soft: rgba(240,112,112,.12);
     --amber: #fbbf24; --amber-soft: rgba(251,191,36,.12); --blue: #60a5fa; --blue-soft: rgba(96,165,250,.12);
-    --term: #0a0c10; --status: #2a2c55; --status-fg: #e5e7eb; --shadow: 0 1px 2px rgba(0,0,0,.4); --pop: 0 12px 40px rgba(0,0,0,.6);
+    --add-bg: rgba(46,160,67,.18); --add-fg: #7ee2a0; --del-bg: rgba(248,81,73,.15); --del-fg: #ffa198;
+  --term: #0a0c10; --status: #2a2c55; --status-fg: #e5e7eb; --shadow: 0 1px 2px rgba(0,0,0,.4); --pop: 0 12px 40px rgba(0,0,0,.6);
   }
 }
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
@@ -210,6 +213,32 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .mailrow .h .k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; padding: 0 5px; border-radius: 4px; background: var(--sunk); color: var(--mute); }
 .mailrow .h .k.ask { background: var(--blue-soft); color: var(--blue); } .mailrow .h .k.claim { background: var(--amber-soft); color: var(--amber); } .mailrow .h .k.notice { background: var(--ok-soft); color: var(--ok); }
 
+/* files pane (left, bottom) */
+.side .pbody#sideBody { flex: 1; }
+.files { height: var(--files-h, 280px); flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--line); min-height: 0; }
+.side.no-files .files, .side.no-files .sash.fh { display: none; }
+.side.files-min .files { height: 34px; } .side.files-min .files .pbody { display: none; }
+.frow { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; padding: 4px 12px 4px 26px; font-size: 12.5px; }
+.frow:hover { background: var(--sunk); } .frow.on { background: var(--acc-soft); }
+.frow .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-family: var(--mono); font-size: 12px; }
+.frow .st { font: 700 10.5px var(--mono); width: 12px; text-align: center; }
+.frow .st.A { color: var(--ok); } .frow .st.M { color: var(--amber); } .frow .st.D { color: var(--warn); }
+.frow .ct { font: 11px var(--mono); white-space: nowrap; } .ct .p { color: var(--ok); } .ct .m { color: var(--warn); }
+/* file viewer (right) */
+.rtabs { display: flex; flex: 1; min-width: 0; height: 100%; }
+.rtab { border: 0; background: none; padding: 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); font-weight: 700; border-bottom: 1px solid transparent; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.rtab.on { color: var(--fg); border-bottom-color: var(--acc); }
+.fhead { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: 12.5px; }
+.code { font: 12px/1.6 var(--mono); }
+.code .ln { display: grid; grid-template-columns: 40px 40px 16px 1fr; white-space: pre; }
+.code .ln > span:nth-child(-n+2) { color: var(--mute); text-align: right; padding-right: 8px; user-select: none; opacity: .7; }
+.code .ln .sg { color: var(--mute); user-select: none; }
+.code .ln.add { background: var(--add-bg); } .code .ln.add .sg, .code .ln.add .tx { color: var(--add-fg); } .code .ln.add > span:first-child { box-shadow: inset 3px 0 var(--ok); }
+.code .ln.del { background: var(--del-bg); } .code .ln.del .sg, .code .ln.del .tx { color: var(--del-fg); } .code .ln.del > span:first-child { box-shadow: inset 3px 0 var(--warn); }
+.code .hunk { background: var(--blue-soft); color: var(--blue); padding: 2px 12px; }
+.code .tx { padding-right: 12px; }
+.preview { margin: 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--sunk); }
+
 /* status bar */
 .status { height: 24px; flex: none; background: var(--status); color: var(--status-fg); display: flex; align-items: center; gap: 2px; font-size: 12px; padding: 0 6px; }
 .status button { border: 0; background: none; color: inherit; height: 100%; padding: 0 8px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -255,6 +284,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
   <div class="brand"><i></i><span>Desk</span></div>
   <div class="dd"><button class="sel" id="projBtn" type="button"></button><div class="menu" id="projMenu"></div></div>
   <button class="kbar" id="kbar" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Jump to thread, run a command</span><kbd>Ctrl K</kbd></button>
+  <button class="btn ghost" data-act="theme" id="themeBtn" type="button" title="Light / dark"></button>
   <button class="btn inbox-btn" id="inboxBtn" type="button">Needs you <b>2</b></button>
   <div class="dd"><button class="sel" id="profBtn" type="button"></button><div class="menu" id="profMenu" style="left:auto;right:0"></div></div>
 </header>
@@ -270,7 +300,9 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
     <button data-view="bottom" title="Bottom panel (Ctrl+J)" class="dev"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/></svg></button>
     <button data-view="settings" title="Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
-  <aside class="side" id="side"><div class="phead"><h3 id="sideTitle"></h3><span id="sideTools"></span><button class="ib" data-act="hideSide" title="Collapse (Ctrl+B)">‹</button></div><div class="pbody" id="sideBody"></div></aside>
+  <aside class="side" id="side"><div class="phead"><h3 id="sideTitle"></h3><span id="sideTools"></span><button class="ib" data-act="hideSide" title="Collapse (Ctrl+B)">‹</button></div><div class="pbody" id="sideBody"></div>
+    <div class="sash h fh dev" data-sash="files"></div>
+    <div class="files dev" id="files"><div class="phead"><h3 id="filesTitle">Files</h3><button class="ib" data-act="filesMin" title="Collapse files">▾</button></div><div class="pbody" id="filesBody"></div></div></aside>
   <div class="sash s1" data-sash="side"></div>
   <div class="center" id="center">
     <div class="editor">
@@ -306,7 +338,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
     </div>
   </div>
   <div class="sash s3 dev" data-sash="right"></div>
-  <aside class="rpanel dev" id="right"><div class="phead"><h3>Project</h3><button class="ib" data-act="hideRight" title="Collapse (Ctrl+Alt+B)">›</button></div><div class="pbody" id="rightBody"></div></aside>
+  <aside class="rpanel dev" id="right"><div class="phead" style="padding-left:4px"><div class="rtabs" id="rtabs"></div><button class="ib" data-act="hideRight" title="Collapse (Ctrl+Alt+B)">›</button></div><div class="pbody" id="rightBody"></div></aside>
 </div>
 <footer class="status" id="status"></footer>
 
@@ -368,7 +400,7 @@ const D = {
 const stateWord = { working: "working", blocked: "needs you", review: "in review", done: "done", idle: "idle", queued: "queued", waiting: "waiting on claim" };
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem("proto2." + k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem("proto2." + k, JSON.stringify(v)); } catch {} };
-const S = Object.assign({ profile: "power", project: "agent-desk", open: ["code-3", "code-5"], thread: "code-3", view: "threads", side: true, right: true, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, sizes: { side: 280, right: 300, bottom: 230 } }, load("state", {}));
+const S = Object.assign({ profile: "power", project: "agent-desk", open: ["code-3", "code-5"], thread: "code-3", view: "threads", side: true, right: true, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, rightTab: "project", file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
 S.findings = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -390,6 +422,11 @@ function applyLayout() {
   wb.style.setProperty("--side-w", S.sizes.side + "px");
   wb.style.setProperty("--right-w", S.sizes.right + "px");
   c.style.setProperty("--bottom-h", S.sizes.bottom + "px");
+  $("side").style.setProperty("--files-h", S.sizes.files + "px");
+  $("side").classList.toggle("no-files", S.view !== "threads");
+  $("side").classList.toggle("files-min", S.filesMin);
+  const dark = (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+  $("themeBtn").textContent = dark ? "☀ Light" : "☾ Dark";
   document.querySelectorAll("#abar button").forEach((b) => {
     const v = b.dataset.view;
     b.classList.toggle("on", v === "right" ? S.right : v === "bottom" ? S.bottom : S.side && v === S.view);
@@ -398,18 +435,18 @@ function applyLayout() {
 }
 function sash(e) {
   const el = e.target.closest(".sash"); if (!el) return;
-  const k = el.dataset.sash, start = k === "bottom" ? e.clientY : e.clientX, from = S.sizes[k];
+  const k = el.dataset.sash, vert = k === "bottom" || k === "files", start = vert ? e.clientY : e.clientX, from = S.sizes[k];
   el.classList.add("drag"); el.setPointerCapture(e.pointerId);
   const mv = (ev) => {
-    const d = (k === "bottom" ? ev.clientY : ev.clientX) - start;
+    const d = (vert ? ev.clientY : ev.clientX) - start;
     const v = k === "side" ? from + d : from - d;
-    S.sizes[k] = Math.max(k === "bottom" ? 90 : 180, Math.min(k === "bottom" ? innerHeight - 220 : 560, v));
+    S.sizes[k] = Math.max(vert ? 90 : 180, Math.min(vert ? innerHeight - 220 : 900, v));
     if (k === "side" && v < 120) S.side = false;
     if (k === "right" && v < 120) S.right = false;
     if (k === "bottom" && v < 60) S.bottom = false;
     applyLayout();
   };
-  const up = () => { el.classList.remove("drag"); el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", up); if (S.sizes[k] < 180 && k !== "bottom") S.sizes[k] = 240; };
+  const up = () => { el.classList.remove("drag"); el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", up); if (S.sizes[k] < 180 && !vert) S.sizes[k] = 240; };
   el.addEventListener("pointermove", mv); el.addEventListener("pointerup", up);
 }
 document.addEventListener("pointerdown", sash);
@@ -466,6 +503,74 @@ function renderSide() {
   $("sideBody").innerHTML = h;
 }
 const mailRow = (m) => `<div class="mailrow ${m.unread ? "unread" : ""}"><div class="h"><span class="k ${m.kind}">${m.kind}</span><b class="mono">${m.from}</b><span class="mute">→ ${m.to}</span><span class="spacer"></span><span class="mute">${m.t}</span></div><div>${esc(m.text)}</div></div>`;
+
+// ---------- files (output of the thread's session) ----------
+// group: product = what the thread is meant to deliver; support = tests, docs, notes, review output.
+const FILES = {
+  "code-3": [
+    { path: "src/adapters/mux/hc.ts", st: "A", add: 112, del: 0, group: "product" },
+    { path: "src/adapters/mux/index.ts", st: "M", add: 18, del: 4, group: "product" },
+    { path: "src/types.ts", st: "M", add: 3, del: 1, group: "product" },
+    { path: "test/hc-mux.test.ts", st: "A", add: 64, del: 0, group: "support" },
+    { path: "docs/feature-spec.md", st: "M", add: 12, del: 2, group: "support" },
+    { path: ".desk/code-3/review.json", st: "A", add: 31, del: 0, group: "support" },
+  ],
+  "code-5": [
+    { path: "src/live.ts", st: "M", add: 41, del: 57, group: "product" },
+    { path: "test/live.test.ts", st: "M", add: 22, del: 6, group: "support" },
+  ],
+  "design-1": [
+    { path: "design/review-card.html", st: "A", add: 140, del: 0, group: "product", kind: "design" },
+    { path: "design/review-card-dark.html", st: "A", add: 12, del: 0, group: "product", kind: "design" },
+    { path: "design/notes/review-card.md", st: "A", add: 38, del: 0, group: "support" },
+    { path: "design/refs/github-review.png", st: "A", add: 0, del: 0, group: "support", kind: "image" },
+  ],
+};
+const filesOf = (t) => FILES[t.id] ?? (t.kind === "design"
+  ? [{ path: `design/${t.id}.html`, st: "A", add: 40, del: 0, group: "product", kind: "design" }, { path: `design/notes/${t.id}.md`, st: "A", add: 9, del: 0, group: "support" }]
+  : t.tok === "0" ? [] : [{ path: "src/config.ts", st: "M", add: 26, del: 9, group: "product" }, { path: "test/config.test.ts", st: "M", add: 14, del: 0, group: "support" }]);
+function renderFiles() {
+  const t = thr(), fs = filesOf(t);
+  $("filesTitle").textContent = `Files · ${t.id}`;
+  const grp = (g, label) => { const l = fs.filter((f) => f.group === g); return l.length ? `<details class="sec" open><summary>${label}<span class="r">${l.length}</span></summary>${l.map((f) =>
+    `<button class="frow ${S.file === f.path ? "on" : ""}" data-file="${esc(f.path)}" title="${esc(f.path)}"><span class="st ${f.st}">${f.st}</span><span class="fn">&lrm;${esc(f.path)}</span><span class="ct">${f.add ? `<span class="p">+${f.add}</span>` : ""}${f.del ? ` <span class="m">−${f.del}</span>` : ""}</span></button>`).join("")}</details>` : ""; };
+  $("filesBody").innerHTML = fs.length ? grp("product", t.kind === "design" ? "Output · design" : "Output · product") + grp("support", "Supporting") : `<div class="mute" style="padding:10px 12px;font-size:12.5px">No files yet.</div>`;
+}
+const DIFFS = {
+  "src/adapters/mux/index.ts": [["@@", "-26,12 +26,22 @@ export async function createMux"], [" ", "  let handle: MuxHandle = { mode: \"none\", spawn: directSpawn };"], [" ", "  let note: string | undefined;"], ["-", "  if (cfg.mux === \"herdr\") {"], ["+", "  if (cfg.mux === \"hc\" || cfg.mux === \"auto\") {"], ["+", "    try {"], ["+", "      const hc = await HcMux.connect({ machine: cfg.machine });"], ["+", "      handle = { mode: \"hc\", spawn: hostedSpawn(hc, cfg.dataDir), hc };"], ["+", "      current = { requested: cfg.mux, handle };"], ["+", "      return handle;"], ["+", "    } catch (e: any) {"], ["+", "      note = `hc unavailable (${String(e?.message ?? e)}); trying herdr`;"], ["+", "    }"], ["+", "  }"], ["+", "  if (cfg.mux === \"herdr\" || cfg.mux === \"auto\") {"], [" ", "    try {"], [" ", "      await run(\"herdr\", [\"--version\"], { timeout: 5_000 });"], ["-", "      const herdr = new HerdrMux(\"agent-desk\", join(cfg.dataDir, \".index\", \"mux-panes.json\"));"], ["+", "      const herdr = new HerdrMux(cfg.session, join(cfg.dataDir, \".index\", \"mux-panes.json\"));"], [" ", "      await herdr.ensureServer();"]],
+  "src/types.ts": [["@@", "-70,9 +70,11 @@"], [" ", "export interface MuxAdapter {"], [" ", "  id: string;"], [" ", "  available(): Promise<boolean>;"], ["-", "  spawn(name: string, cmd: string[], cwd: string): Promise<PaneRef>;"], ["+", "  spawn(name: string, cmd: string[], cwd: string, labels?: Record<string, string>): Promise<PaneRef>;"], ["+", "  /** Run a command line inside an existing pane. */"], ["+", "  runIn(p: PaneRef, line: string): Promise<void>;"], [" ", "  write(p: PaneRef, data: string): Promise<void>;"], [" ", "  read(p: PaneRef): Promise<string>;"]],
+};
+function diffFor(f) {
+  if (DIFFS[f.path]) return DIFFS[f.path];
+  if (f.st === "A") return [["@@", `-0,0 +1,${f.add} @@ new file`], ...["// " + f.path, "import { execFile } from \"node:child_process\";", "import { promisify } from \"node:util\";", "", "const run = promisify(execFile);", "", "export class HcMux implements MuxAdapter {", "  id = \"hc\";", "  constructor(private machine?: string) {}", "", "  async ensurePane(key: string, cwd: string) {", "    const live = await this.list();", "    const hit = live.find((t) => t.labels[\"desk.key\"] === key);", "    if (hit) return hit;", "    return this.runBg([\"bash\"], cwd, { \"desk.key\": key });", "  }", "}"].map((l) => ["+", l])];
+  return [["@@", "-12,7 +12,9 @@"], [" ", "  // unchanged context"], ["-", "  const old = poll(700);"], ["+", "  const sub = await hc.events.subscribe();"], ["+", "  for await (const ev of sub) onEvent(ev);"], [" ", "  return () => stop();"]];
+}
+function renderDiff(f) {
+  let o = 0, n = 0;
+  return `<div class="code">${diffFor(f).map(([k, txt]) => {
+    if (k === "@@") { const m = /-(\d+),\d+ \+(\d+)/.exec(txt); if (m) { o = +m[1]; n = +m[2]; } return `<div class="hunk">@@ ${esc(txt)}</div>`; }
+    const a = k === "+", d = k === "-", ol = a ? "" : o++, nl = d ? "" : n++;
+    return `<div class="ln ${a ? "add" : d ? "del" : ""}"><span>${ol}</span><span>${nl}</span><span class="sg">${a ? "+" : d ? "−" : " "}</span><span class="tx">${esc(txt)}</span></div>`;
+  }).join("")}</div>`;
+}
+function renderDesign(f) {
+  return `<div class="preview"><div style="padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--card)">
+    <div style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:var(--warn)"></span><b>Adversary review</b><span class="spacer"></span><span class="tag v-changes">changes needed</span></div>
+    <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;font-size:12.5px"><span class="sev high">high</span><span>Finding text, one line</span><span class="btn sm">Fix it</span><span class="sev med">med</span><span>Second finding</span><span class="btn sm">Fix it</span></div>
+    <div style="display:flex;justify-content:flex-end;gap:6px"><span class="btn sm">Dismiss all</span><span class="btn pri sm">Send fixes</span></div></div></div>
+    <div style="padding:0 12px 12px;font-size:12px" class="mute">Rendered preview of ${esc(f.path)}. Switch to Source to see the diff.</div>`;
+}
+function renderFileView() {
+  const f = filesOf(thr()).find((x) => x.path === S.file);
+  if (!f) return `<div class="mute" style="padding:12px">Pick a file on the left.</div>`;
+  const design = f.kind === "design", img = f.kind === "image";
+  S.fmode ??= "preview";
+  return `<div class="fhead"><span class="st ${f.st} mono" style="font-weight:700">${f.st}</span><b class="mono" style="overflow-wrap:anywhere">${esc(f.path)}</b>
+      <span class="ct mono">${f.add ? `<span class="p" style="color:var(--ok)">+${f.add}</span>` : ""} ${f.del ? `<span style="color:var(--warn)">−${f.del}</span>` : ""}</span>
+      <span class="tag ${f.group === "product" ? "v-pass" : ""}" style="${f.group === "product" ? "" : "background:var(--sunk);color:var(--mute)"}">${f.group === "product" ? "output" : "supporting"}</span>
+      <span class="spacer"></span>${design ? `<button class="btn sm" data-act="fmode">${S.fmode === "preview" ? "Source" : "Preview"}</button>` : ""}<button class="btn sm" data-act="openEditor">Open in editor</button></div>
+    ${img ? `<div class="preview" style="height:180px;display:grid;place-items:center" class="mute">reference image</div>` : design && S.fmode === "preview" ? renderDesign(f) : renderDiff(f)}`;
+}
 
 // ---------- editor ----------
 // Models come from the agent: pick the agent, the model list follows it.
@@ -543,6 +648,10 @@ function renderBottom() {
 
 // ---------- right panel ----------
 function renderRight() {
+  const fileOk = S.file && filesOf(thr()).some((x) => x.path === S.file);
+  if (!fileOk) { S.file = null; if (S.rightTab === "file") S.rightTab = "project"; }
+  $("rtabs").innerHTML = `<button class="rtab ${S.rightTab === "project" ? "on" : ""}" data-rtab="project">Project</button>${S.file ? `<button class="rtab ${S.rightTab === "file" ? "on" : ""}" data-rtab="file" title="${esc(S.file)}">${esc(S.file.split("/").pop())}</button>` : ""}`;
+  if (S.rightTab === "file") { $("rightBody").innerHTML = renderFileView(); return; }
   const p = proj(), [B, A] = leads(), total = D.context.reduce((s, c) => s + c.tok, 0);
   const colors = ["var(--acc)", "var(--blue)", "var(--ok)", "var(--amber)", "var(--warn)", "var(--mute)"];
   $("rightBody").innerHTML = `
@@ -616,6 +725,9 @@ function act(a) {
     move: "Move: save → kill → move → copy → start", model: "Override for this thread (default from models.toml)", refreshCtx: "Summarising code-4…", newproj: "New project (prototype)", sendFixes: "Accepted findings sent to builder",
     herdr: "herdr-app do focus hp/t12 (prototype)", release: "code-3 will release the claim after its commit; code-6 starts then", reply: "Builder will answer code-6 by mail", snooze: "Snoozed", newThr: "New thread code-7: queued (3 of 3 running)", session: "herdr --session " + proj().session, profile: "Change profile from the top-right menu" };
   if (a === "deskDev") { S.deskDev = !S.deskDev; if (!S.deskDev && proj().dev) go("agent-desk"); else render(); return toast(S.deskDev ? "Desk dev visible" : "Desk dev hidden"); }
+  if (a === "filesMin") { S.filesMin = !S.filesMin; return applyLayout(); }
+  if (a === "fmode") { S.fmode = S.fmode === "preview" ? "source" : "preview"; return renderRight(); }
+  if (a === "openEditor") return toast(`Opens ${S.file} in your editor (code --goto on ${proj().machine})`);
   if (a === "viewTerm") { const showing = S.bottom && S.btab === "terminals"; S.bottom = !showing; S.btab = "terminals"; return render(); }
   if (a === "launch") { S.sess[S.project] = "launched by desk"; render(); return toast(`herdr session "${proj().session}" started on ${proj().machine}: Claude | Codex`); }
   if (a === "attach") { S.sess[S.project] = "attached"; render(); return toast(`Attached to existing herdr session "${proj().session}"`); }
@@ -626,10 +738,10 @@ function act(a) {
   if (a === "hideRight") { S.right = false; return applyLayout(); }
   if (a === "hideBottom") { S.bottom = false; S.maxBottom = false; return applyLayout(); }
   if (a === "maxBottom") { S.maxBottom = !S.maxBottom; renderBottom(); return applyLayout(); }
-  if (a === "theme") { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const n = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = n; try { localStorage.setItem("theme", n); } catch {} return; }
+  if (a === "theme") { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const n = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = n; try { localStorage.setItem("theme", n); } catch {} return applyLayout(); }
   toast(msgs[a] ?? a);
 }
-function render() { renderHeader(); renderSide(); renderEditor(); renderBottom(); renderRight(); renderStatus(); renderDrawer(); applyLayout(); }
+function render() { renderHeader(); renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); renderDrawer(); applyLayout(); }
 
 document.addEventListener("click", (e) => {
   const el = e.target.closest("button, .scrim, .x");
@@ -642,7 +754,9 @@ document.addEventListener("click", (e) => {
   if (el.id === "sendMore") return $("sendMenu").classList.toggle("open");
   if (el.dataset.p) return go(el.dataset.p);
   if (el.dataset.prof) return setProfile(el.dataset.prof);
-  if (el.dataset.t || el.dataset.tab) { S.thread = el.dataset.t || el.dataset.tab; S.findings = {}; renderSide(); renderEditor(); renderBottom(); renderStatus(); persist(); return; }
+  if (el.dataset.t || el.dataset.tab) { S.thread = el.dataset.t || el.dataset.tab; S.findings = {}; renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); persist(); return; }
+  if (el.dataset.file) { S.file = el.dataset.file; S.rightTab = "file"; S.right = true; if (S.sizes.right < 460) S.sizes.right = 520; renderFiles(); renderRight(); return applyLayout(); }
+  if (el.dataset.rtab) { S.rightTab = el.dataset.rtab; return renderRight(); }
   if (el.dataset.tg) { S.target = el.dataset.tg; return renderEditor(); }
   if (el.dataset.btab) { S.btab = el.dataset.btab; renderBottom(); return persist(); }
   if (el.dataset.view) return toggleView(el.dataset.view === "side" ? S.view : el.dataset.view);
@@ -679,6 +793,11 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Escape") { openPal(false); openDrawer(false); }
 });
 if (innerWidth <= 760) { S.side = false; S.right = false; S.bottom = false; }
+// Deep links for demos: ?thread=code-3&file=src/types.ts&theme=dark
+{ const q = new URLSearchParams(location.search);
+  if (q.get("theme")) document.documentElement.dataset.theme = q.get("theme");
+  if (q.get("thread")) { S.thread = q.get("thread"); S.open = [S.thread]; }
+  if (q.get("file")) { S.file = q.get("file"); S.rightTab = "file"; S.right = true; S.sizes.right = Math.max(S.sizes.right, 520); } }
 render();
 </script>
 </body>
