@@ -38,6 +38,8 @@ import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
 import { Pairs } from "./pair.js";
 import { desk2Action } from "./desk2-api.js";
+import { MergeQueue } from "./merge-queue.js";
+import { readReview } from "./review.js";
 import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 
@@ -253,6 +255,10 @@ new LiveFollower(
     (sourceId, event) => bus.publish({ sourceId, threadId: "ask", event }),
     (id) => helloed.size > 0 && !busy.has(`${id}/ask`),
   ).start();
+const mergeQueue = new MergeQueue(cfg.dataDir, {
+  review: async (it) => { const rec = store.get(it.sourceId); return readReview(rec?.location ?? it.repo, it.threadId, it.worktree); },
+  onChange: (items) => { for (const [s, f] of helloed) if (f.has("code")) s({ type: "merge_queue", items: items.filter((i) => seesSelf(f) || !isSelfSource(store.get(i.sourceId))) }); },
+});
 const broadcastSources = () => { for (const [s, f] of helloed) s({ type: "sources", sources: sourcesFor(f) }); };
 const broadcastHSessions = async () => {
   const rows = hsessions.rows4web(await runningSessions());
@@ -336,7 +342,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
   if (/^(pair|merge)_|^files$|^file_diff$/.test(String(m.type))) needFeature(features, "code");
-  if (await desk2Action(m, { store, pairs, send })) return;
+  if (await desk2Action(m, { store, pairs, send, mergeQueue, seesSelf: seesSelf(features) })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.

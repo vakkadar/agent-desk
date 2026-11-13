@@ -5,11 +5,17 @@ import type { SourceRec, ThreadStore } from "./threads.js";
 import type { Pairs } from "./pair.js";
 import { changedFiles, fileDiff } from "./worktree.js";
 import { readReview, reviewerBrief, verdictPath } from "./review.js";
+import type { MergeQueue } from "./merge-queue.js";
+import { isSelfSource } from "./self-dev.js";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export interface Desk2Ctx {
   store: ThreadStore;
   pairs: Pairs;
   send: (m: unknown) => void;
+  mergeQueue: MergeQueue;
+  seesSelf: boolean; // may see the desk's own repo (Desk dev)
 }
 
 const need = <T>(v: T | undefined, what: string): T => {
@@ -24,6 +30,16 @@ export function threadDir(rec: SourceRec, threadId: string): string {
 }
 
 const diffBase = (th: { base?: string; lastSnap?: string }, which: unknown) => (which === "last" ? th.lastSnap ?? th.base : th.base);
+
+const visibleQueue = (c: Desk2Ctx) => c.mergeQueue.list().filter((i) => c.seesSelf || !isSelfSource(c.store.get(i.sourceId)));
+
+/** Command run before merging, from <project>/.desk/merge-check.json (a desk-local file, e.g. ["npm","test"]). */
+async function mergeCheck(repo: string): Promise<string[] | undefined> {
+  try {
+    const j = JSON.parse(await readFile(join(repo, ".desk", "merge-check.json"), "utf8"));
+    return Array.isArray(j) && j.length && j.every((x) => typeof x === "string") ? j : undefined;
+  } catch { return undefined; }
+}
 
 export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
   switch (m.type) {
@@ -75,6 +91,25 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       const path = verdictPath(rec.location, th.id, th.worktree);
       await c.pairs.sendTo(rec.id, th.id, "reviewer", reviewerBrief(th.id, path, th.lastSnap ?? th.base ?? "HEAD"));
       c.send({ type: "pair_review", sourceId: rec.id, threadId: th.id, path });
+      return true;
+    }
+    case "merge_enqueue": {
+      // Queue a finished code thread to merge into the project (review must be clean unless force).
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      if (!th.worktree || !th.branch) throw new Error(`${th.id} has no worktree to merge`);
+      const check = await mergeCheck(rec.location);
+      c.mergeQueue.enqueue({ sourceId: rec.id, threadId: th.id, repo: rec.location, worktree: th.worktree, branch: th.branch, force: m.force === true, check });
+      c.send({ type: "merge_queue", items: visibleQueue(c) });
+      return true;
+    }
+    case "merge_cancel": {
+      c.mergeQueue.cancel(String(m.sourceId), String(m.threadId));
+      c.send({ type: "merge_queue", items: visibleQueue(c) });
+      return true;
+    }
+    case "merge_list": {
+      c.send({ type: "merge_queue", items: visibleQueue(c) });
       return true;
     }
     case "pair_get": {
