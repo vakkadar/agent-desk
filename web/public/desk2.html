@@ -113,6 +113,12 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .m { font-size: 11.5px; color: var(--mute); white-space: nowrap; }
 .row.need-row { border-left-color: var(--amber); }
+.row.rel { min-height: 28px; padding: 3px 12px 3px 30px; font-size: 12.5px; color: var(--mute); }
+.row.rel .id { font-size: 12px; font-weight: 500; } .row.rel .rl { font-size: 11px; white-space: nowrap; }
+.row.rel.on2 { background: var(--sunk); color: var(--fg); }
+.relchip { border: 1px solid var(--line); background: var(--sunk); border-radius: 6px; padding: 0 7px; height: 24px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; color: var(--mute); }
+.relchip:hover { color: var(--fg); border-color: var(--line2); }
+.relchip b { font: 600 12px var(--mono); color: var(--fg); }
 .row.need-row .t { white-space: normal; font-size: 13px; }
 .files { height: var(--fh, 260px); flex: none; border-top: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
 .files.min { height: 36px; } .files.min .fbody { display: none; }
@@ -127,7 +133,8 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 
 /* middle: one thin thread line, the text box, the output */
 .tline { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; white-space: nowrap; overflow: hidden; font-size: 13px; }
-.tline .ttl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tline .ttl { overflow: hidden; text-overflow: ellipsis; min-width: 90px; flex-shrink: 1; }
+.tline .meta, .tline .relchip { flex-shrink: 0; }
 .tline .meta { color: var(--mute); font-size: 12px; }
 .ctxm { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mute); }
 .ctxm i { width: 46px; height: 5px; border-radius: 3px; background: var(--sunk); overflow: hidden; display: inline-block; }
@@ -283,6 +290,7 @@ const THREADS = {
     { id: "code-3", title: "hc mux adapter", state: "blocked", age: "now", kind: "code", ctx: 74, tok: "184k" },
     { id: "code-5", title: "events.subscribe instead of polling", state: "working", age: "now", kind: "code", ctx: 31, tok: "41k" },
     { id: "code-4", title: "Settings repo split", state: "blocked", age: "5m", kind: "code", ctx: 52, tok: "92k" },
+    { id: "code-6", title: "Phone inbox (from design-2)", state: "idle", age: "—", kind: "code", ctx: 0, tok: "0" },
     { id: "design-1", title: "Review line in the builder turn", state: "done", age: "31m", kind: "design", ctx: 40, tok: "63k" },
     { id: "design-2", title: "Phone inbox", state: "working", age: "now", kind: "design", ctx: 22, tok: "19k" },
   ],
@@ -305,6 +313,17 @@ const FILES = {
   "code-1": [{ path: "src/hub/ask.ts", st: "M", a: 30, d: 12 }],
   "dev-1": [{ path: "src/restart.ts", st: "A", a: 54, d: 0 }, { path: "test/restart.test.ts", st: "A", a: 40, d: 0 }],
 };
+// Links between threads: a code thread built from a design (FR-7), threads that mailed each other,
+// a question that turned into a thread. Shown in every perspective, whatever the kind.
+const LINKS = [
+  ["design-1", "code-3", "design for"], ["code-3", "code-5", "mail"], ["code-3", "code-4", "mail"],
+  ["ask", "code-4", "asked first in"], ["design-2", "code-6", "design for"],
+];
+const REL_BACK = { "design for": "built from", "mail": "mail", "asked first in": "started from" };
+function relatedOf(id) {
+  return LINKS.flatMap(([a, b, rel]) => a === id ? [[b, rel]] : b === id ? [[a, REL_BACK[rel]]] : [])
+    .map(([x, rel]) => { const t = (THREADS[S.place] || []).find((y) => y.id === x) ?? Object.values(THREADS).flat().find((y) => y.id === x); return t ? { t, rel } : null; }).filter(Boolean);
+}
 // output vs supporting comes from a path rule in the project's config, not from the agent
 const SUPPORTING = [/^test\//, /^docs\//, /\.md$/, /^\.desk\//, /notes\//];
 const isSupport = (p) => SUPPORTING.some((r) => r.test(p));
@@ -327,7 +346,7 @@ const thr = () => (THREADS[S.place] || []).find((t) => t.id === S.thread);
 const phone = () => innerWidth <= 760;
 const stateWord = { working: "working", blocked: "needs you", done: "done", idle: "idle" };
 function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 2000); }
-function persist() { const { dispute, view, ...r } = S; save("s", r); }
+function persist() { const { dispute, view, fileOwner, ...r } = S; save("s", r); }
 const visiblePlaces = () => PLACES.filter((p) => (p.kind === "general" || dv()) && (!p.deskdev || S.deskDev));
 
 // ================= left =================
@@ -337,14 +356,16 @@ function renderTree() {
     NEEDS.map((n) => `<button class="row need-row" data-go="${n.place}|${n.thread}"><span class="dot s-blocked"></span><span class="t"><span class="mono" style="font-weight:600">${n.thread}</span> ${esc(n.text)}</span></button>`).join("");
   for (const p of visiblePlaces()) {
     if (p.kind === "general" && S.persp !== "ask") continue;
-    if (p.kind !== "general" && p.id !== S.place && !(THREADS[p.id] || []).some((t) => kindOf(t) === S.persp)) continue;
+    if (p.kind !== "general" && p.id !== S.place && !(THREADS[p.id] || []).some((t) => kindOf(t) === S.persp)) continue; // empty for this perspective
     const closed = S.closed[p.id];
     h += `<div class="grp ${closed ? "closed" : ""}"><button class="tg" data-tg="${p.id}">${esc(p.name)}</button>${p.deskdev ? '<span class="pill p-amber">desk dev</span>' : ""}<span class="mach dev">· ${p.machine}</span>
       <button class="ib" data-new="${p.id}" title="${p.kind === "general" ? "New question" : `New ${S.persp} thread`}">+</button></div>`;
     if (!closed && !(THREADS[p.id] || []).some((t) => kindOf(t) === S.persp)) h += `<div class="mute" style="padding:2px 14px 6px 30px;font-size:12.5px">No ${S.persp} threads.</div>`;
     if (closed) continue;
     h += (THREADS[p.id] || []).filter((t) => kindOf(t) === S.persp).map((t) =>
-      `<button class="row ${p.id === S.place && t.id === S.thread && S.view === "thread" ? "on" : ""}" data-go="${p.id}|${t.id}"><span class="dot s-${t.state}"></span><span class="id">${t.id}</span><span class="t">${esc(t.title)}</span><span class="m">${t.state === "blocked" ? '<span class="needs">!</span>' : t.age}</span></button>`).join("");
+      `<button class="row ${p.id === S.place && t.id === S.thread && S.view === "thread" ? "on" : ""}" data-go="${p.id}|${t.id}"><span class="dot s-${t.state}"></span><span class="id">${t.id}</span><span class="t">${esc(t.title)}</span><span class="m">${t.id !== S.thread && relatedOf(t.id).length ? `<span title="${relatedOf(t.id).length} related">↳${relatedOf(t.id).length}</span> ` : ""}${t.state === "blocked" ? '<span class="needs">!</span>' : t.age}</span></button>` +
+      (p.id === S.place && t.id === S.thread ? relatedOf(t.id).map(({ t: x, rel }) =>
+        `<button class="row rel ${S.fileOwner === x.id ? "on2" : ""}" data-rel="${x.id}" title="Open ${x.id}'s output here (double-click to go to it)"><span class="rl">↳ ${rel}</span><span class="dot s-${x.state}"></span><span class="id">${x.id}</span><span class="t">${esc(x.title)}</span></button>`).join("") : "")).join("");
   }
   $("tree").innerHTML = h;
 }
@@ -381,7 +402,8 @@ function tline(t) {
   const p = place();
   if (!t) return `<div class="tline"><b>${esc(p.name)}</b><span class="meta">${p.kind === "general" ? "new question" : "new thread"}</span></div>`;
   return `<div class="tline"><span class="dot s-${t.state}"></span><b class="mono">${t.id}</b><span class="ttl">${esc(t.title)}</span>
-    <span class="meta no-phone">· ${esc(p.name)}${dv() ? ` on ${p.machine}` : ""}</span>${p.deskdev ? '<span class="pill p-amber">main, not pushed</span>' : ""}<span class="sp"></span>
+    <span class="meta no-phone">· ${esc(p.name)}${dv() ? ` on ${p.machine}` : ""}</span>
+    ${relatedOf(t.id).slice(0, 3).map(({ t: x, rel }) => `<button class="relchip no-phone" data-rel="${x.id}" title="${rel} ${x.id}: open its output on the right">${rel === "mail" ? "✉" : "↔"} <b>${x.id}</b></button>`).join("")}${p.deskdev ? '<span class="pill p-amber">main, not pushed</span>' : ""}<span class="sp"></span>
     ${t.ctx != null ? `<span class="ctxm dev ${t.ctx >= 70 ? "hi" : ""}" title="Context used"><i><b style="width:${t.ctx}%"></b></i>${t.ctx}%</span><span class="meta dev no-phone">${t.tok}</span>` : ""}
     ${t.kind && t.kind !== "ask" ? `<button class="ib dev" data-act="terminal" title="Open this thread in herdr-app (builder | adversary)">&gt;_</button>` : ""}
     <button class="ib" data-menu="thread" title="Thread and project actions">⋮</button></div>`;
@@ -448,8 +470,9 @@ function diffOf(f) {
   return [["@@", "-12,6 +12,8 @@"], [" ", "  // unchanged"], ["-", "  const timer = setInterval(poll, 700);"], ["+", "  const sub = await hc.events.subscribe();"], ["+", "  for await (const ev of sub) onEvent(ev);"], [" ", "  return () => stop();"]];
 }
 function renderRight() {
-  const app = $("app"), t = thr(), f = t && (FILES[t.id] || []).find((x) => x.path === S.file);
-  if (!f) { S.file = null; app.classList.add("no-right"); $("right").innerHTML = ""; return; }
+  const app = $("app"), owner = S.fileOwner ?? thr()?.id, f = owner && (FILES[owner] || []).find((x) => x.path === S.file);
+  if (!f) { S.file = null; S.fileOwner = null; app.classList.add("no-right"); $("right").innerHTML = ""; return; }
+  const fromRel = S.fileOwner && S.fileOwner !== thr()?.id;
   app.classList.remove("no-right");
   let o = 0, n = 0;
   const diff = `<div class="code">${diffOf(f).map(([k, x]) => {
@@ -463,6 +486,7 @@ function renderRight() {
       <div class="mute" style="font-size:12.5px">One line inside the builder's turn; expands to the findings.</div></div>`;
   $("right").innerHTML = `<div class="rhead"><button class="ib only-phone" data-act="closeFile" aria-label="Back">‹</button><span class="st ${f.st} mono" style="font-weight:700">${f.st}</span><span class="path">${esc(f.path)}</span>
       <span class="pill ${isSupport(f.path) ? "p-mute" : "p-ok"}">${isSupport(f.path) ? "supporting" : "output"}</span><button class="ib no-phone" data-act="closeFile" title="Close file">×</button></div>
+    ${fromRel ? `<div class="rhead" style="min-height:34px;background:var(--sunk)"><span class="mute">From related thread</span><b class="mono">${S.fileOwner}</b><span class="sp"></span>${(FILES[S.fileOwner] || []).length > 1 ? `<select class="btn sm" data-sel="relfile">${FILES[S.fileOwner].map((x) => `<option ${x.path === f.path ? "selected" : ""}>${esc(x.path)}</option>`).join("")}</select>` : ""}<button class="btn sm" data-gorel="${S.fileOwner}">Go to ${S.fileOwner}</button></div>` : ""}
     <div class="rhead" style="min-height:36px">${f.design ? `<div class="seg"><button class="${S.fileMode === "preview" ? "on" : ""}" data-fmode="preview">Preview</button><button class="${S.fileMode !== "preview" ? "on" : ""}" data-fmode="diff">Diff</button></div>` : ""}
       <span class="mute">Changes since</span><div class="seg"><button class="${S.diffBase === "branch" ? "on" : ""}" data-base="branch">thread start</button><button class="${S.diffBase === "last" ? "on" : ""}" data-base="last">my last message</button></div>
       <span class="sp"></span><span class="mono"><span style="color:var(--ok)">+${f.a}</span> <span style="color:var(--warn)">${f.d ? "−" + f.d : ""}</span></span><button class="btn sm" data-act="openEditor">Open in editor</button></div>
@@ -546,7 +570,7 @@ function autoPreview() { const t = thr(), f = t && (FILES[t.id] || []).find((x) 
 function go(p, t) {
   const th = t && (THREADS[p] || []).find((x) => x.id === t);
   if (th && kindOf(th) !== S.persp) switchPersp(kindOf(th), true);
-  S.place = p; S.thread = t; S.view = "thread"; S.file = null; S.dispute = null; S.closed[p] = false; autoPreview(); pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
+  S.place = p; S.thread = t; S.view = "thread"; S.file = null; S.fileOwner = null; S.dispute = null; S.closed[p] = false; autoPreview(); pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
 function openThreadScreen(on) { $("app").classList.toggle("thread-open", on); document.body.classList.toggle("thread-open", on); }
 function newThread(kind) { go(S.place === "general" ? "agent-desk" : S.place, null); setTimeout(() => { const s = document.querySelector('[data-sel="newKind"]'); if (s) s.value = kind; $("msg")?.focus(); }, 0); }
 function view(v) { S.view = v; pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
@@ -601,7 +625,11 @@ document.addEventListener("click", (e) => {
   if (d.go) { const [p, t] = d.go.split("|"); return go(p, t); }
   if (d.tg) { S.closed[d.tg] = !S.closed[d.tg]; return renderTree(); }
   if (d.new) { return go(d.new, null); }
-  if (d.file) { closeMenu(); S.file = d.file; renderFiles(); renderRight(); return layout(); }
+  if (d.rel) { const fs = FILES[d.rel] || []; const main = fs.find((x) => x.design) ?? fs.find((x) => !isSupport(x.path)) ?? fs[0];
+    if (!main) return toast(`${d.rel} has no files yet`);
+    S.fileOwner = d.rel; S.file = main.path; S.fileMode = main.design ? "preview" : "diff"; renderTree(); renderFiles(); renderRight(); return layout(); }
+  if (d.gorel) { const pl = PLACES.find((x) => (THREADS[x.id] || []).some((y) => y.id === d.gorel)); return go(pl.id, d.gorel); }
+  if (d.file) { closeMenu(); S.fileOwner = null; S.file = d.file; renderFiles(); renderRight(); return layout(); }
   if (d.fmode) { S.fileMode = d.fmode; return renderRight(); }
   if (d.base) { S.diffBase = d.base; toast(d.base === "branch" ? "Diff since the thread's branch left main" : "Diff since your last message"); return renderRight(); }
   if (d.dispute) { S.dispute = d.dispute; return renderMid(); }
@@ -611,7 +639,8 @@ document.addEventListener("click", (e) => {
   if (d.pi) return palItems[+d.pi].run();
   if (d.act) return act(d.act, el);
 });
-document.addEventListener("change", (e) => { const s = e.target.dataset?.sel; if (s === "target") { S.target = e.target.value; persist(); } });
+document.addEventListener("dblclick", (e) => { const el = e.target.closest("[data-rel]"); if (el) { const pl = PLACES.find((x) => (THREADS[x.id] || []).some((y) => y.id === el.dataset.rel)); go(pl.id, el.dataset.rel); } });
+document.addEventListener("change", (e) => { const s = e.target.dataset?.sel; if (s === "relfile") { S.file = e.target.value; const fm = (FILES[S.fileOwner] || []).find((x) => x.path === S.file); S.fileMode = fm?.design ? "preview" : "diff"; return renderRight(); } if (s === "target") { S.target = e.target.value; persist(); } });
 $("palIn").addEventListener("input", () => { palSel = 0; renderPal(); });
 $("palIn").addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown") { palSel = Math.min(palSel + 1, palItems.length - 1); renderPal(); e.preventDefault(); }
@@ -641,6 +670,7 @@ document.addEventListener("pointerdown", (e) => {
   if (q.get("place")) { S.place = q.get("place"); S.thread = q.get("thread"); }
   if (q.get("file")) S.file = q.get("file");
   if (q.get("persp")) { S.persp = q.get("persp"); if (S.persp === "design") { S.rw = Math.round(innerWidth * 0.5); autoPreview(); } }
+  if (q.get("rel")) { const fs = FILES[q.get("rel")] || []; const m = fs.find((x) => x.design) ?? fs[0]; if (m) { S.fileOwner = q.get("rel"); S.file = m.path; S.fileMode = m.design ? "preview" : "diff"; } }
   if (q.get("open") && phone()) openThreadScreen(true); }
 render();
 </script>
