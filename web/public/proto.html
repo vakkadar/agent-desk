@@ -400,7 +400,7 @@ const D = {
 const stateWord = { working: "working", blocked: "needs you", review: "in review", done: "done", idle: "idle", queued: "queued", waiting: "waiting on claim" };
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem("proto2." + k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem("proto2." + k, JSON.stringify(v)); } catch {} };
-const S = Object.assign({ profile: "power", project: "agent-desk", open: ["code-3", "code-5"], thread: "code-3", view: "threads", side: true, right: true, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, rightTab: "project", file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
+const S = Object.assign({ profile: "power", project: "agent-desk", thread: "code-3", view: "threads", side: true, right: true, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, rightTab: "project", file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
 S.findings = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -585,9 +585,8 @@ function leads() {
 }
 function renderEditor() {
   const t = thr(), [B, A] = leads();
-  S.open = S.open.filter((id) => threads().some((x) => x.id === id));
-  if (!S.open.includes(t.id)) S.open.push(t.id);
-  $("etabs").innerHTML = S.open.map((id) => { const x = threads().find((y) => y.id === id); return `<button class="etab ${id === t.id ? "on" : ""}" data-tab="${id}"><span class="dot s-${x.state}"></span><span class="mono">${id}</span><span class="x" data-close="${id}" title="Close">×</span></button>`; }).join("") +
+  // One thread in the working area at a time: picking another replaces it (no editor tabs).
+  $("etabs").innerHTML = `<span class="etab on" style="cursor:default"><span class="mute">${esc(proj().name)} ›</span><span class="dot s-${t.state}"></span><span class="mono">${t.id}</span><span class="mute">${t.kind === "design" ? "design" : "code"}</span></span>` +
     `<span class="tools"><button class="ib" data-view="side" title="Toggle side (Ctrl+B)">⇤</button><button class="ib dev" data-view="bottom" title="Toggle bottom (Ctrl+J)">⇩</button><button class="ib dev" data-view="right" title="Toggle right (Ctrl+Alt+B)">⇥</button></span>`;
   $("th").innerHTML = `<h2>${dv() ? `<span class="mono" style="font-size:14px">${t.id}</span> · ` : ""}${esc(t.title)}</h2>
     <span class="chip"><span class="dot s-${t.state}"></span>${stateWord[t.state]}</span>
@@ -719,7 +718,7 @@ function openPal(on) { $("pal").classList.toggle("open", on); $("scrim").classLi
 // ---------- actions ----------
 function focusMode() { const any = S.side || S.right || S.bottom; S.side = S.right = S.bottom = !any; applyLayout(); toast(any ? "Focus mode: panels hidden" : "Panels back"); }
 function setProfile(k) { S.profile = k; if (!pw() && S.view !== "threads" && S.view !== "search") S.view = "threads"; if (!pw()) S.target = "builder"; render(); toast(`Profile: ${PROFILES[k].label}`); }
-function go(p, t) { S.project = p; S.thread = t ?? D.threads[p][0].id; S.open = [S.thread]; S.findings = {}; openPal(false); openDrawer(false); render(); }
+function go(p, t) { S.project = p; S.thread = t ?? D.threads[p][0].id; S.findings = {}; openPal(false); openDrawer(false); render(); }
 function act(a) {
   const msgs = { allow: "Allowed once", allowAlways: "Allowed for this thread", deny: "Denied", answer: "Answer sent", restart: "Restart needs tests passing + your OK", rollback: "Would revert last commit on main",
     move: "Move: save → kill → move → copy → start", model: "Override for this thread (default from models.toml)", refreshCtx: "Summarising code-4…", newproj: "New project (prototype)", sendFixes: "Accepted findings sent to builder",
@@ -748,13 +747,12 @@ document.addEventListener("click", (e) => {
   const keep = el && (el.id === "projBtn" || el.id === "profBtn" || el.id === "sendMore");
   if (!keep) document.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
   if (!el) return;
-  if (el.dataset.close) { e.stopPropagation(); S.open = S.open.filter((x) => x !== el.dataset.close); if (!S.open.length) S.open = [threads()[0].id]; if (S.thread === el.dataset.close) S.thread = S.open[S.open.length - 1]; S.findings = {}; return render(); }
   if (el.id === "projBtn") return $("projMenu").classList.toggle("open");
   if (el.id === "profBtn") return $("profMenu").classList.toggle("open");
   if (el.id === "sendMore") return $("sendMenu").classList.toggle("open");
   if (el.dataset.p) return go(el.dataset.p);
   if (el.dataset.prof) return setProfile(el.dataset.prof);
-  if (el.dataset.t || el.dataset.tab) { S.thread = el.dataset.t || el.dataset.tab; S.findings = {}; renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); persist(); return; }
+  if (el.dataset.t) { S.thread = el.dataset.t; S.file = null; S.rightTab = "project"; S.findings = {}; renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); persist(); return; }
   if (el.dataset.file) { S.file = el.dataset.file; S.rightTab = "file"; S.right = true; if (S.sizes.right < 460) S.sizes.right = 520; renderFiles(); renderRight(); return applyLayout(); }
   if (el.dataset.rtab) { S.rightTab = el.dataset.rtab; return renderRight(); }
   if (el.dataset.tg) { S.target = el.dataset.tg; return renderEditor(); }
@@ -796,7 +794,7 @@ if (innerWidth <= 760) { S.side = false; S.right = false; S.bottom = false; }
 // Deep links for demos: ?thread=code-3&file=src/types.ts&theme=dark
 { const q = new URLSearchParams(location.search);
   if (q.get("theme")) document.documentElement.dataset.theme = q.get("theme");
-  if (q.get("thread")) { S.thread = q.get("thread"); S.open = [S.thread]; }
+  if (q.get("thread")) S.thread = q.get("thread");
   if (q.get("file")) { S.file = q.get("file"); S.rightTab = "file"; S.right = true; S.sizes.right = Math.max(S.sizes.right, 520); } }
 render();
 </script>
