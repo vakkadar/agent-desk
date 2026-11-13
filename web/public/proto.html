@@ -161,6 +161,11 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .card.approve { border-color: var(--amber); } .card.mailc { border-color: var(--acc); }
 .fnd { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 7px 0; border-top: 1px solid var(--line); }
 .fnd:first-child { border-top: 0; }
+.rv { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.rv > summary { cursor: pointer; padding: 6px 10px; font-size: 12.5px; display: flex; gap: 8px; align-items: center; list-style: none; }
+.rv > summary::after { content: "▸"; margin-left: auto; color: var(--mute); } .rv[open] > summary::after { content: "▾"; }
+.rvb { padding: 4px 10px 8px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.rvl { display: flex; gap: 8px; align-items: baseline; } .okt { color: var(--ok); }
 .acts-inline { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .sev { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; margin-top: 2px; }
 .sev.high { background: var(--warn-soft); color: var(--warn); } .sev.med { background: var(--amber-soft); color: var(--amber); } .sev.low { background: var(--sunk); color: var(--mute); }
@@ -609,20 +614,22 @@ function renderEditor() {
     <button class="ib dev" data-act="viewTerm" title="View terminal (herdr session)">&gt;_</button><button class="ib pow" data-act="herdr" title="Open in herdr-app">⧉</button>
     <button class="ib" data-view="side" title="Toggle side (Ctrl+B)">⇤</button><button class="ib dev" data-view="bottom" title="Toggle bottom (Ctrl+J)">⇩</button><button class="ib dev" data-view="right" title="Toggle file panel (Ctrl+Alt+B)">⇥</button>`;
 
-  const open = FINDINGS.filter((f) => !S.findings[f.id]).length;
+  // Only one agent speaks in the output: the builder. The adversary reviews it directly; its result is a
+  // line inside the builder's turn. Mail from other threads goes to the builder too.
+  const disputed = S.findings.f3 ? "" : "f3";
   $("feed").innerHTML = `
     <div class="turn me"><div class="who">you${dv() ? ` · <span class="mono">browser[${t.id}]</span>` : ""}</div><div class="body">Add an hc mux adapter behind MuxAdapter. Keep herdr 0.9.1 as fallback. Label terminals so they show in herdr-app.</div></div>
-    <div class="turn"><div class="who"><span class="dot" style="background:var(--warn)"></span><b>Adversary</b><span class="dev">· ${A.agent} · ${A.model}</span></div>
-      <div class="body"><div>${open ? `Changes needed: ${open} open.` : "Pass. All findings handled."}</div>${FINDINGS.map(fRow).join("")}
-        ${open ? `<div class="acts-inline"><button class="btn pri sm" data-act="sendFixes">Send fixes to builder</button><button class="btn ghost sm" data-act="dismissAll">Dismiss all</button></div>` : ""}</div></div>
-    <div class="turn pow"><div class="who"><span class="dot" style="background:var(--acc)"></span><b class="mono">code-6</b><span>· mail</span><span class="mute">· 2m</span></div>
-      <div class="body">${esc(D.mail[0].text)}<div class="acts-inline"><button class="btn sm" data-act="release">Release claim after commit</button><button class="btn sm" data-act="reply">Let builder reply</button></div></div></div>
-    <div class="turn"><div class="who"><span class="dot s-blocked"></span><b>${dv() ? B.role : "Claude"}</b><span class="dev">· ${B.agent} · ${B.model}</span><span class="pow">· sub-agent hp/t12</span><span style="color:var(--amber);font-weight:600">· needs you</span></div>
+    <div class="turn"><div class="who"><span class="dot ${disputed ? "s-blocked" : "s-review"}"></span><b>${dv() ? "Builder" : "Claude"}</b><span class="dev">· ${B.agent} · ${B.model}</span>${disputed ? `<span style="color:var(--amber);font-weight:600">· needs you</span>` : ""}</div>
       <div class="body">Added <code>HcMux</code> with <code>ensurePane</code>, <code>runIn</code>, <code>interrupt</code>, <code>list</code>. <code>createMux</code> picks <code>mux = "hc"</code> first, then herdr, then direct.
-        <div class="tool dev"><span>✓ claim src/adapters/mux/** (mailbox)</span><span>✓ edit src/adapters/mux/hc.ts (+112)</span><span>✓ edit src/adapters/mux/index.ts (+18 −4)</span><span>✓ npm test: 214 passed</span><span>✓ notice → all: createMux() return type changed</span></div>
-        <div class="diff dev"><span class="d">-  if (cfg.mux === "herdr") {</span>
-<span class="a">+  if (cfg.mux === "hc" || cfg.mux === "auto") {</span>
-<span class="a">+    const hc = await HcMux.connect(cfg);</span></div>
+        <div class="tool dev"><span>✓ edit src/adapters/mux/hc.ts (+112)</span><span>✓ edit src/adapters/mux/index.ts (+18 −4)</span><span>✓ npm test: 214 passed</span></div>
+        <details class="rv dev"><summary><span class="dot" style="background:var(--ok)"></span>Reviewed by ${A.agent} ${A.model}: 3 findings · 2 fixed · ${disputed ? "1 disputed" : "1 settled by you"}</summary>
+          <div class="rvb">
+            <div class="rvl"><span class="sev high">high</span><span><code>ensurePane</code> didn't check the machine; after a move it would type into the old host. <b class="okt">Fixed</b>: matches on <code>desk.machine</code> label.</span></div>
+            <div class="rvl"><span class="sev med">med</span><span><code>hc ls --json</code> on every turn. <b class="okt">Fixed</b>: one <code>events.subscribe</code> stream, cached list.</span></div>
+            <div class="rvl"><span class="sev low">low</span><span>Rename label <code>desk.key</code> → <code>desk.project</code> + <code>desk.thread</code>. ${S.findings.f3 ? `<b class="okt">You: ${S.findings.f3}</b>` : `<b style="color:var(--amber)">Disputed</b>: builder says <code>desk.key</code> already encodes both and herdr-app filters on it.`}</span></div>
+          </div></details>
+        ${disputed ? `<div class="acts-inline"><span style="align-self:center">Disputed finding, your call:</span><button class="btn sm" data-fd="kept as is">Keep desk.key</button><button class="btn sm" data-fd="rename asked">Rename it</button></div>` : ""}
+        <div class="pow mute" style="margin-top:8px;font-size:12.5px">✉ code-6 asked for <code>src/adapters/mux/**</code>; I'll release the claim after this commit.</div>
         <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">Wants to run <code>rm -rf ~/.cache/herdr-core/t-old</code><div class="acts-inline"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div></div></div>`;
   // Text box sits on top, so newest turn goes right under it (same as the current desk).
   const fd = $("feed"); fd.append(...[...fd.children].reverse()); fd.scrollTop = 0;
@@ -807,6 +814,7 @@ document.addEventListener("click", (e) => {
   if (el.dataset.pop) return openPop(el.dataset.pop, el);
   if (el.dataset.btab) { S.btab = el.dataset.btab; renderBottom(); return persist(); }
   if (el.dataset.view) return toggleView(el.dataset.view === "side" ? S.view : el.dataset.view);
+  if (el.dataset.fd) { S.findings.f3 = el.dataset.fd; return renderEditor(); }
   if (el.dataset.fa) { const f = el.closest(".fnd").dataset.f; if (el.dataset.fa === "undo") delete S.findings[f]; else S.findings[f] = el.dataset.fa; renderEditor(); renderBottom(); return; }
   if (el.dataset.n) return palItems[+el.dataset.n].run();
   if (el.dataset.act) return act(el.dataset.act);
