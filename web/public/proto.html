@@ -599,19 +599,18 @@ function renderEditor() {
   const open = FINDINGS.filter((f) => !S.findings[f.id]).length;
   $("feed").innerHTML = `
     <div class="turn me"><div class="who">you${dv() ? ` · <span class="mono">browser[${t.id}]</span>` : ""}</div><div class="body">Add an hc mux adapter behind MuxAdapter. Keep herdr 0.9.1 as fallback. Label terminals so they show in herdr-app.</div></div>
-    <div class="turn"><div class="who"><span class="dot" style="background:var(--blue)"></span><b>${dv() ? B.role : "Claude"}</b><span class="dev">· ${B.agent} · ${B.model}</span><span class="pow">· sub-agent hp/t12</span></div>
-      <div class="body">Added <code>HcMux</code> with <code>ensurePane</code>, <code>runIn</code>, <code>interrupt</code>, <code>list</code>. <code>createMux</code> picks <code>mux = "hc"</code> first, then herdr, then direct.
-        <div class="tool dev"><span>✓ claim src/adapters/mux/** (mailbox)</span><span>✓ edit src/adapters/mux/hc.ts (+112)</span><span>✓ edit src/adapters/mux/index.ts (+18 −4)</span><span>✓ npm test: 214 passed</span><span>✓ notice → all: createMux() return type changed</span></div>
-        <div class="diff dev"><span class="d">-  if (cfg.mux === "herdr") {</span>
-<span class="a">+  if (cfg.mux === "hc" || cfg.mux === "auto") {</span>
-<span class="a">+    const hc = await HcMux.connect(cfg);</span></div></div></div>
     <div class="turn"><div class="who"><span class="dot" style="background:var(--warn)"></span><b>Adversary</b><span class="dev">· ${A.agent} · ${A.model}</span></div>
       <div class="body"><div>${open ? `Changes needed: ${open} open.` : "Pass. All findings handled."}</div>${FINDINGS.map(fRow).join("")}
         ${open ? `<div class="acts-inline"><button class="btn pri sm" data-act="sendFixes">Send fixes to builder</button><button class="btn ghost sm" data-act="dismissAll">Dismiss all</button></div>` : ""}</div></div>
     <div class="turn pow"><div class="who"><span class="dot" style="background:var(--acc)"></span><b class="mono">code-6</b><span>· mail</span><span class="mute">· 2m</span></div>
       <div class="body">${esc(D.mail[0].text)}<div class="acts-inline"><button class="btn sm" data-act="release">Release claim after commit</button><button class="btn sm" data-act="reply">Let builder reply</button></div></div></div>
-    <div class="turn"><div class="who"><span class="dot s-blocked"></span><b>${dv() ? B.role : "Claude"}</b><span>· needs you</span></div>
-      <div class="body">Wants to run <code>rm -rf ~/.cache/herdr-core/t-old</code><div class="acts-inline"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div></div>`;
+    <div class="turn"><div class="who"><span class="dot s-blocked"></span><b>${dv() ? B.role : "Claude"}</b><span class="dev">· ${B.agent} · ${B.model}</span><span class="pow">· sub-agent hp/t12</span><span style="color:var(--amber);font-weight:600">· needs you</span></div>
+      <div class="body">Added <code>HcMux</code> with <code>ensurePane</code>, <code>runIn</code>, <code>interrupt</code>, <code>list</code>. <code>createMux</code> picks <code>mux = "hc"</code> first, then herdr, then direct.
+        <div class="tool dev"><span>✓ claim src/adapters/mux/** (mailbox)</span><span>✓ edit src/adapters/mux/hc.ts (+112)</span><span>✓ edit src/adapters/mux/index.ts (+18 −4)</span><span>✓ npm test: 214 passed</span><span>✓ notice → all: createMux() return type changed</span></div>
+        <div class="diff dev"><span class="d">-  if (cfg.mux === "herdr") {</span>
+<span class="a">+  if (cfg.mux === "hc" || cfg.mux === "auto") {</span>
+<span class="a">+    const hc = await HcMux.connect(cfg);</span></div>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">Wants to run <code>rm -rf ~/.cache/herdr-core/t-old</code><div class="acts-inline"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div></div></div>`;
   // Text box sits on top, so newest turn goes right under it (same as the current desk).
   const fd = $("feed"); fd.append(...[...fd.children].reverse()); fd.scrollTop = 0;
   $("pfx").textContent = `browser[${t.id}]:`;
