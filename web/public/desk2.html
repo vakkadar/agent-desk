@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Desk v2 prototype</title>
+<link rel="icon" href="./icon.svg" type="image/svg+xml" />
+<script>try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
+<style>
+/* Desk v2 — fresh design, fake data.
+   Rule: the working area is the text box + output. Everything else is summoned (Ctrl+K, a click) and goes away. */
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9; --panel: #ffffff; --card: #ffffff; --sunk: #eff1f4; --hover: #f1f2f5;
+  --fg: #1b1d22; --mute: #697080; --line: #e4e6eb; --line2: #d3d6dd;
+  --acc: #4f46e5; --acc-fg: #fff; --acc-soft: rgba(79,70,229,.10);
+  --ok: #1a8f4c; --ok-soft: rgba(26,143,76,.12); --warn: #c23b3b; --warn-soft: rgba(194,59,59,.10);
+  --amber: #b45309; --amber-soft: rgba(180,83,9,.12); --blue: #2563eb; --blue-soft: rgba(37,99,235,.10);
+  --add-bg: #e6f6ea; --add-fg: #116b37; --del-bg: #fdeceb; --del-fg: #a12a2a;
+  --shadow: 0 1px 2px rgba(16,18,24,.05), 0 4px 14px rgba(16,18,24,.05); --pop: 0 14px 44px rgba(16,18,24,.2);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1014; --panel: #14171c; --card: #191c22; --sunk: #101318; --hover: #1d2027;
+  --fg: #e6e8ec; --mute: #8f96a2; --line: #252a32; --line2: #353b46;
+  --acc: #8b8df9; --acc-fg: #0e1014; --acc-soft: rgba(139,141,249,.15);
+  --ok: #4ade80; --ok-soft: rgba(74,222,128,.13); --warn: #f27474; --warn-soft: rgba(242,116,116,.13);
+  --amber: #fbbf24; --amber-soft: rgba(251,191,36,.13); --blue: #60a5fa; --blue-soft: rgba(96,165,250,.13);
+  --add-bg: rgba(46,160,67,.18); --add-fg: #7ee2a0; --del-bg: rgba(248,81,73,.15); --del-fg: #ffa198;
+  --shadow: 0 1px 2px rgba(0,0,0,.4); --pop: 0 14px 44px rgba(0,0,0,.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1014; --panel: #14171c; --card: #191c22; --sunk: #101318; --hover: #1d2027;
+    --fg: #e6e8ec; --mute: #8f96a2; --line: #252a32; --line2: #353b46;
+    --acc: #8b8df9; --acc-fg: #0e1014; --acc-soft: rgba(139,141,249,.15);
+    --ok: #4ade80; --ok-soft: rgba(74,222,128,.13); --warn: #f27474; --warn-soft: rgba(242,116,116,.13);
+    --amber: #fbbf24; --amber-soft: rgba(251,191,36,.13); --blue: #60a5fa; --blue-soft: rgba(96,165,250,.13);
+    --add-bg: rgba(46,160,67,.18); --add-fg: #7ee2a0; --del-bg: rgba(248,81,73,.15); --del-fg: #ffa198;
+    --shadow: 0 1px 2px rgba(0,0,0,.4); --pop: 0 14px 44px rgba(0,0,0,.6);
+  }
+}
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+html, body { height: 100%; }
+body { margin: 0; display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; overflow: hidden; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+code { font: 12.5px var(--mono); background: var(--sunk); padding: 1px 5px; border-radius: 4px; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.mute { color: var(--mute); }
+.sp { flex: 1; }
+.btn { border: 1px solid var(--line2); background: var(--card); border-radius: 8px; padding: 0 12px; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.btn:hover { border-color: var(--mute); }
+.btn:disabled { opacity: .45; cursor: default; border-color: var(--line2); }
+.btn.pri { background: var(--acc); border-color: var(--acc); color: var(--acc-fg); font-weight: 600; }
+.btn.sm { min-height: 28px; padding: 0 9px; font-size: 12.5px; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.hot { border-color: var(--amber); color: var(--amber); }
+.ib { border: 0; background: none; min-width: 30px; height: 30px; border-radius: 7px; display: inline-grid; place-items: center; color: var(--mute); padding: 0 6px; }
+.ib:hover { background: var(--hover); color: var(--fg); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.s-working { background: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); animation: pulse 1.6s infinite; }
+.s-blocked { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.s-done { background: var(--ok); } .s-idle { background: var(--line2); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px transparent; } }
+@media (prefers-reduced-motion: reduce) { .s-working { animation: none; } }
+.kbd { font: 11px var(--mono); border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; color: var(--mute); }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; white-space: nowrap; }
+.p-ok { background: var(--ok-soft); color: var(--ok); } .p-amber { background: var(--amber-soft); color: var(--amber); } .p-mute { background: var(--sunk); color: var(--mute); }
+body.lv-everyday .dev, body.lv-everyday .pow, body.lv-developer .pow { display: none !important; }
+
+/* ---------- top bar ---------- */
+header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; padding-right: 6px; }
+.brand i { width: 10px; height: 10px; border-radius: 3px; background: var(--acc); }
+.kbar { flex: 0 1 520px; margin: 0 auto; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 1px solid var(--line); background: var(--sunk); border-radius: 8px; color: var(--mute); text-align: left; }
+.kbar > span:not(.kbd) { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.need { position: relative; }
+.need b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--amber); color: #fff; font-size: 11px; display: grid; place-items: center; padding: 0 4px; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); font-weight: 700; display: grid; place-items: center; border: 0; }
+
+/* ---------- three areas ---------- */
+.app { flex: 1; min-height: 0; display: flex; }
+.left { width: var(--lw, 272px); flex: none; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.right { width: var(--rw, 540px); flex: none; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-width: 0; }
+.app.no-left .left, .app.no-left .sash.l, .app.no-right .right, .app.no-right .sash.r { display: none; }
+.sash { width: 5px; margin: 0 -2px; cursor: col-resize; z-index: 3; flex: none; }
+.sash:hover, .sash.drag { background: var(--acc); }
+.sash.h { width: auto; height: 5px; margin: -2px 0; cursor: row-resize; }
+
+/* left: places tree + files of the open thread */
+.tree { flex: 1; overflow: auto; min-height: 0; padding: 6px 0 10px; }
+.grp { display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px 12px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); }
+.grp .mach { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.grp .ib { width: 24px; min-width: 24px; height: 24px; margin-left: auto; }
+.grp button.tg { border: 0; background: none; padding: 0; display: flex; align-items: center; gap: 6px; font: inherit; color: inherit; text-transform: inherit; letter-spacing: inherit; }
+.grp button.tg::before { content: "▾"; font-size: 10px; width: 10px; }
+.grp.closed button.tg::before { content: "▸"; }
+.row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; padding: 6px 12px 6px 14px; min-height: 34px; border-left: 2px solid transparent; }
+.row:hover { background: var(--hover); }
+.row.on { background: var(--acc-soft); border-left-color: var(--acc); }
+.row .id { font: 600 12.5px var(--mono); flex: none; }
+.row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .m { font-size: 11.5px; color: var(--mute); white-space: nowrap; }
+.row.need-row { border-left-color: var(--amber); }
+.row.need-row .t { white-space: normal; font-size: 13px; }
+.files { height: var(--fh, 260px); flex: none; border-top: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.files.min { height: 36px; } .files.min .fbody { display: none; }
+.fhead { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 6px 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); flex: none; }
+.fbody { flex: 1; overflow: auto; min-height: 0; padding-bottom: 8px; }
+.fsub { padding: 6px 12px 2px; font-size: 11px; color: var(--mute); font-weight: 600; }
+.frow { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; padding: 4px 12px; font-size: 12.5px; min-height: 28px; }
+.frow:hover { background: var(--hover); } .frow.on { background: var(--acc-soft); }
+.frow .st { font: 700 11px var(--mono); width: 12px; } .st.A { color: var(--ok); } .st.M { color: var(--amber); } .st.D { color: var(--warn); }
+.frow .fn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 12px var(--mono); }
+.frow .ct { font: 11px var(--mono); white-space: nowrap; } .ct .a { color: var(--ok); } .ct .d { color: var(--warn); }
+
+/* middle: one thin thread line, the text box, the output */
+.tline { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; white-space: nowrap; overflow: hidden; font-size: 13px; }
+.tline .ttl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tline .meta { color: var(--mute); font-size: 12px; }
+.ctxm { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mute); }
+.ctxm i { width: 46px; height: 5px; border-radius: 3px; background: var(--sunk); overflow: hidden; display: inline-block; }
+.ctxm i b { display: block; height: 100%; background: var(--acc); }
+.ctxm.hi i b { background: var(--amber); } .ctxm.hi { color: var(--amber); }
+.box { padding: 14px 16px 12px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+.cbox { border: 1.5px solid var(--line2); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); }
+.cbox:focus-within { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
+.cbox textarea { display: block; width: 100%; border: 0; outline: 0; background: transparent; resize: vertical; min-height: 128px; max-height: 50vh; padding: 12px 14px 4px; font-size: 15px; line-height: 1.55; }
+.crow { display: flex; align-items: center; gap: 8px; padding: 8px 10px 10px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line2); background: var(--sunk); font-size: 12.5px; white-space: nowrap; }
+.chip.pfx { font-family: var(--mono); color: var(--acc); background: var(--acc-soft); border-color: transparent; font-weight: 600; }
+.chip select { border: 0; background: transparent; padding: 0; font-size: 12.5px; outline: 0; }
+.send { min-width: 104px; justify-content: center; font-size: 14px; }
+.hint { font-size: 12px; color: var(--mute); padding: 0 16px 0 2px; }
+.out { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.out > * { flex: none; }
+.turn { max-width: 880px; display: flex; flex-direction: column; gap: 4px; }
+.turn .who { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mute); }
+.turn .who b { color: var(--fg); }
+.turn .body { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+.turn.me { align-self: flex-end; max-width: 760px; }
+.turn.me .body { background: var(--acc-soft); border-color: transparent; box-shadow: none; }
+.turn.me .who { justify-content: flex-end; }
+.fold { border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 32px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::after { content: "▸"; margin-left: auto; color: var(--mute); } .fold[open] > summary::after { content: "▾"; }
+.fold .fb { padding: 2px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+.step { font: 12px var(--mono); color: var(--mute); display: flex; gap: 8px; }
+.step .ok { color: var(--ok); }
+.flink { border: 0; background: none; padding: 0; color: var(--acc); font: 12px var(--mono); text-decoration: underline dotted; text-underline-offset: 3px; }
+.rvl { display: flex; gap: 8px; align-items: baseline; }
+.sev { font: 700 10px var(--sans); padding: 1px 6px; border-radius: 4px; text-transform: uppercase; }
+.sev.high { background: var(--warn-soft); color: var(--warn); } .sev.med { background: var(--amber-soft); color: var(--amber); } .sev.low { background: var(--sunk); color: var(--mute); }
+.ask { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.ask .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.needs { color: var(--amber); font-weight: 600; }
+.diffmini { font: 12px/1.5 var(--mono); background: var(--sunk); border-radius: 8px; padding: 6px 10px; white-space: pre; overflow-x: auto; }
+.diffmini .a { color: var(--ok); } .diffmini .d { color: var(--warn); }
+.empty { margin: auto; text-align: center; color: var(--mute); max-width: 420px; display: flex; flex-direction: column; gap: 8px; padding: 40px 0; }
+
+/* right: one file */
+.rhead { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: 12.5px; }
+.rhead .path { font: 600 12.5px var(--mono); overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.rbody { flex: 1; overflow: auto; min-height: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--card); padding: 0 9px; height: 26px; font-size: 12px; border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; } .seg button.on { background: var(--acc-soft); color: var(--acc); font-weight: 600; }
+.code { font: 12px/1.6 var(--mono); padding-bottom: 12px; }
+.ln { display: grid; grid-template-columns: 40px 40px 16px 1fr; white-space: pre; }
+.ln > span:nth-child(-n+2) { color: var(--mute); text-align: right; padding-right: 8px; opacity: .7; user-select: none; }
+.ln .sg { color: var(--mute); user-select: none; } .ln .tx { padding-right: 12px; }
+.ln.add { background: var(--add-bg); } .ln.add .tx, .ln.add .sg { color: var(--add-fg); } .ln.add > span:first-child { box-shadow: inset 3px 0 var(--ok); }
+.ln.del { background: var(--del-bg); } .ln.del .tx, .ln.del .sg { color: var(--del-fg); } .ln.del > span:first-child { box-shadow: inset 3px 0 var(--warn); }
+.hunk { background: var(--blue-soft); color: var(--blue); padding: 2px 12px; }
+.prev { margin: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--card); display: flex; flex-direction: column; gap: 10px; }
+
+/* overlays */
+.scrim { position: fixed; inset: 0; background: rgba(10,12,16,.38); z-index: 40; display: none; } .scrim.on { display: block; }
+.pal { position: fixed; top: 10vh; left: 50%; transform: translateX(-50%); width: min(620px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--pop); z-index: 41; display: none; overflow: hidden; }
+.pal.on { display: block; }
+.pal input { width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 14px 16px; outline: 0; font-size: 16px; }
+.pal .tips { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pal .tips span { font-size: 11.5px; color: var(--mute); background: var(--sunk); border-radius: 5px; padding: 1px 7px; }
+.pal .list { max-height: 52vh; overflow: auto; padding: 6px; }
+.pal .it { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 8px; width: 100%; border: 0; background: none; text-align: left; min-height: 40px; }
+.pal .it.on { background: var(--acc-soft); }
+.pal .it .k { font-size: 11px; color: var(--mute); width: 62px; flex: none; }
+.pal .it .s { font-size: 12px; color: var(--mute); margin-left: auto; white-space: nowrap; }
+.menu { position: fixed; z-index: 42; min-width: 260px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--pop); padding: 6px; display: none; max-height: 70vh; overflow: auto; }
+.menu.on { display: block; }
+.menu .h { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); padding: 8px 10px 2px; }
+.menu .it { display: flex; flex-direction: column; align-items: flex-start; width: 100%; border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 7px; }
+.menu .it:hover { background: var(--hover); }
+.menu .it b { font-weight: 600; font-size: 13px; } .menu .it span { font-size: 12px; color: var(--mute); }
+.menu .it[disabled] { opacity: .45; cursor: default; }
+.menu .it.on b::after { content: "  ✓"; color: var(--acc); }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 50; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+.toast.on { opacity: 1; }
+.only-phone { display: none !important; }
+
+/* ---------- phone: two screens (list, thread); file opens full screen ---------- */
+@media (max-width: 760px) {
+  .only-phone { display: inline-grid !important; } .no-phone { display: none !important; }
+  .kbar { flex: 1; } .kbar .kbd { display: none; }
+  .app { position: relative; }
+  .left { position: absolute; inset: 0; width: auto; z-index: 5; border-right: 0; }
+  .app.thread-open .left { display: none; }
+  .right { position: absolute; inset: 0; width: auto; z-index: 6; border-left: 0; }
+  .sash { display: none !important; }
+  .box { padding: 10px 12px; } .cbox textarea { min-height: 96px; font-size: 16px; }
+  .out { padding: 12px; } .turn.me { max-width: 92%; }
+  .tline { padding-left: 4px; }
+  header { gap: 6px; padding: 0 8px; }
+  #backBtn { display: none !important; } body.thread-open #backBtn { display: inline-grid !important; }
+  .files { display: none !important; }
+  .crow .pfx { display: none; } .crow .send { flex: 1; }
+  .need { min-width: 40px; justify-content: center; padding: 0 10px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <button class="ib only-phone" id="backBtn" title="Back to list" aria-label="Back">‹</button>
+  <button class="ib no-phone" data-act="toggleLeft" title="Toggle list (Ctrl+B)" aria-label="Toggle list">☰</button>
+  <div class="brand no-phone"><i></i>Desk</div>
+  <button class="kbar" id="kbar" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search, jump, web, command</span><span class="kbd">Ctrl K</span></button>
+  <button class="btn need" data-act="needs" type="button"><span class="no-phone">Needs you</span><span class="only-phone" style="font-weight:600">!</span><b id="needN">2</b></button>
+  <button class="avatar" data-menu="me" type="button" title="Profile, theme, settings">R</button>
+</header>
+
+<div class="app" id="app">
+  <aside class="left" id="left">
+    <div class="tree" id="tree"></div>
+    <div class="sash h dev" data-sash="fh"></div>
+    <div class="files dev" id="files"></div>
+  </aside>
+  <div class="sash l no-phone" data-sash="lw"></div>
+  <main class="mid" id="mid"></main>
+  <div class="sash r no-phone" data-sash="rw"></div>
+  <aside class="right" id="right"></aside>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="pal" id="pal" role="dialog" aria-label="Search, jump, web, command">
+  <input id="palIn" autocomplete="off" placeholder="Type to search everything…" />
+  <div class="tips"><span>thread name → jump</span><span>words → search history</span><span>? query → web</span><span>&gt; command</span></div>
+  <div class="list" id="palList"></div>
+</div>
+<div class="menu" id="menu"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ================= fake data =================
+const PLACES = [
+  { id: "general", name: "General", machine: "laptop", kind: "general" },
+  { id: "agent-desk", name: "agent-desk", machine: "hp", kind: "project" },
+  { id: "sanatana", name: "sanatana-hub", machine: "hostinger", kind: "project" },
+  { id: "desk-dev", name: "Desk dev", machine: "laptop", kind: "project", deskdev: true },
+];
+const THREADS = {
+  general: [
+    { id: "q-14", title: "Best way to back up Fedora home to the HP box", state: "done", age: "10m" },
+    { id: "q-13", title: "Explain OSC 7501 agent status", state: "idle", age: "2h" },
+    { id: "q-12", title: "Train times Hyderabad → Vizag in December", state: "idle", age: "1d" },
+  ],
+  "agent-desk": [
+    { id: "ask", title: "Project questions", state: "idle", age: "1h", kind: "ask" },
+    { id: "code-3", title: "hc mux adapter", state: "blocked", age: "now", kind: "code", ctx: 74, tok: "184k" },
+    { id: "code-5", title: "events.subscribe instead of polling", state: "working", age: "now", kind: "code", ctx: 31, tok: "41k" },
+    { id: "code-4", title: "Settings repo split", state: "blocked", age: "5m", kind: "code", ctx: 52, tok: "92k" },
+    { id: "design-1", title: "Review line in the builder turn", state: "done", age: "31m", kind: "design", ctx: 40, tok: "63k" },
+  ],
+  sanatana: [{ id: "code-1", title: "Hub /api/ask streaming", state: "idle", age: "3d", kind: "code", ctx: 22, tok: "77k" }],
+  "desk-dev": [{ id: "dev-1", title: "Restart gate after tests", state: "working", age: "now", kind: "code", ctx: 18, tok: "28k" }],
+};
+const NEEDS = [
+  { place: "agent-desk", thread: "code-3", text: "Builder wants to run rm -rf ~/.cache/herdr-core/t-old" },
+  { place: "agent-desk", thread: "code-4", text: "Move desk.toml into the settings repo now, or keep a copy?" },
+];
+const FILES = {
+  "code-3": [
+    { path: "src/adapters/mux/hc.ts", st: "A", a: 112, d: 0 }, { path: "src/adapters/mux/index.ts", st: "M", a: 18, d: 4 }, { path: "src/types.ts", st: "M", a: 3, d: 1 },
+    { path: "test/hc-mux.test.ts", st: "A", a: 64, d: 0 }, { path: "docs/feature-spec.md", st: "M", a: 12, d: 2 }, { path: ".desk/code-3/review.json", st: "A", a: 31, d: 0 },
+  ],
+  "code-5": [{ path: "src/live.ts", st: "M", a: 41, d: 57 }, { path: "test/live.test.ts", st: "M", a: 22, d: 6 }],
+  "code-4": [{ path: "src/config.ts", st: "M", a: 26, d: 9 }, { path: "test/config.test.ts", st: "M", a: 14, d: 0 }],
+  "design-1": [{ path: "design/review-line.html", st: "A", a: 140, d: 0, design: true }, { path: "design/notes/review-line.md", st: "A", a: 38, d: 0 }],
+  "code-1": [{ path: "src/hub/ask.ts", st: "M", a: 30, d: 12 }],
+  "dev-1": [{ path: "src/restart.ts", st: "A", a: 54, d: 0 }, { path: "test/restart.test.ts", st: "A", a: 40, d: 0 }],
+};
+// output vs supporting comes from a path rule in the project's config, not from the agent
+const SUPPORTING = [/^test\//, /^docs\//, /\.md$/, /^\.desk\//, /notes\//];
+const isSupport = (p) => SUPPORTING.some((r) => r.test(p));
+const AGENTS = { claude: { label: "Claude Code", models: ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"], installed: true }, codex: { label: "Codex", models: ["(from codex)"], installed: false } };
+const TARGETS = ["This desk", "sanatana hub", "Local model"];
+const LEVELS = { everyday: "Everyday", developer: "Developer", power: "Power developer" };
+
+// ================= state =================
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem("d2." + k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem("d2." + k, JSON.stringify(v)); } catch {} };
+const S = Object.assign({ level: "power", deskDev: true, place: "agent-desk", thread: "code-3", left: true, file: null, fileMode: "diff", diffBase: "branch", filesMin: false, closed: {}, target: "This desk", builderModel: "Sonnet 5.5", reviewModel: "Opus 5.5", lw: 272, rw: 540, fh: 260 }, load("s", {}));
+S.dispute = null; S.view = "thread";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const dv = () => S.level !== "everyday", pw = () => S.level === "power";
+const place = () => PLACES.find((p) => p.id === S.place);
+const thr = () => (THREADS[S.place] || []).find((t) => t.id === S.thread);
+const phone = () => innerWidth <= 760;
+const stateWord = { working: "working", blocked: "needs you", done: "done", idle: "idle" };
+function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 2000); }
+function persist() { const { dispute, view, ...r } = S; save("s", r); }
+const visiblePlaces = () => PLACES.filter((p) => (p.kind === "general" || dv()) && (!p.deskdev || S.deskDev));
+
+// ================= left =================
+function renderTree() {
+  let h = "";
+  if (NEEDS.length) h += `<div class="grp">Needs you <span class="pill p-amber">${NEEDS.length}</span></div>` +
+    NEEDS.map((n) => `<button class="row need-row" data-go="${n.place}|${n.thread}"><span class="dot s-blocked"></span><span class="t"><span class="mono" style="font-weight:600">${n.thread}</span> ${esc(n.text)}</span></button>`).join("");
+  for (const p of visiblePlaces()) {
+    const closed = S.closed[p.id];
+    h += `<div class="grp ${closed ? "closed" : ""}"><button class="tg" data-tg="${p.id}">${esc(p.name)}</button>${p.deskdev ? '<span class="pill p-amber">desk dev</span>' : ""}<span class="mach dev">· ${p.machine}</span>
+      <button class="ib" data-new="${p.id}" title="${p.kind === "general" ? "New question" : "New thread"}">+</button></div>`;
+    if (closed) continue;
+    h += (THREADS[p.id] || []).filter((t) => dv() || !t.kind || t.kind === "ask").map((t) =>
+      `<button class="row ${p.id === S.place && t.id === S.thread && S.view === "thread" ? "on" : ""}" data-go="${p.id}|${t.id}"><span class="dot s-${t.state}"></span><span class="id">${t.id}</span><span class="t">${esc(t.title)}</span><span class="m">${t.state === "blocked" ? '<span class="needs">!</span>' : t.age}</span></button>`).join("");
+  }
+  $("tree").innerHTML = h;
+}
+function renderFiles() {
+  const t = thr(), fs = (t && FILES[t.id]) || [];
+  const row = (f) => `<button class="frow ${S.file === f.path ? "on" : ""}" data-file="${esc(f.path)}" title="${esc(f.path)}"><span class="st ${f.st}">${f.st}</span><span class="fn">&lrm;${esc(f.path)}</span><span class="ct">${f.a ? `<span class="a">+${f.a}</span>` : ""}${f.d ? ` <span class="d">−${f.d}</span>` : ""}</span></button>`;
+  const out = fs.filter((f) => !isSupport(f.path)), sup = fs.filter((f) => isSupport(f.path));
+  $("files").className = "files dev" + (S.filesMin ? " min" : "");
+  $("files").innerHTML = `<div class="fhead">Files${t ? ` · ${t.id}` : ""}<span class="sp"></span><button class="ib" data-act="filesMin" title="${S.filesMin ? "Show" : "Hide"} files">${S.filesMin ? "▴" : "▾"}</button></div>
+    <div class="fbody">${fs.length ? `${out.length ? `<div class="fsub">Output</div>${out.map(row).join("")}` : ""}${sup.length ? `<div class="fsub">Supporting</div>${sup.map(row).join("")}` : ""}` : `<div class="mute" style="padding:6px 12px;font-size:12.5px">No files changed${t && !t.kind ? " (questions don't change files)" : ""}.</div>`}</div>`;
+}
+
+// ================= middle =================
+function composer(t) {
+  const p = place(), general = p.kind === "general";
+  const pfx = t ? `browser[${t.id}]:` : "browser:";
+  const modeChip = !t && !general && dv() ? `<span class="chip">New <select data-sel="newKind"><option>code</option><option>design</option><option>ask</option></select></span>` : "";
+  const targetChip = general ? `<span class="chip">Run on <select data-sel="target">${TARGETS.map((x) => `<option ${x === S.target ? "selected" : ""}>${x}</option>`).join("")}</select></span>` : "";
+  const running = t && t.state === "working", hiCtx = t && t.ctx >= 70;
+  return `<div class="box"><div class="cbox">
+      <textarea id="msg" placeholder="${t ? `Message ${t.id}` : general ? "Ask anything — a new question starts its own session" : "Describe the work — starts a new thread"}  (Ctrl+Enter to send)"></textarea>
+      <div class="crow">
+        <span class="chip pfx dev">${pfx}</span>${modeChip}${targetChip}
+        <button class="ib" data-act="attach" title="Attach a file or image">📎</button>
+        <span class="sp"></span>
+        <button class="btn no-phone" data-act="stop" ${running ? "" : "disabled"} title="Stop the running turn">Stop</button>
+        <button class="btn no-phone ${hiCtx ? "hot" : ""}" data-act="compact" title="Summarize the session to free context">/compact</button>
+        <button class="btn" data-menu="more" title="Agent and desk commands">⋯</button>
+        <button class="btn pri send" data-act="send">Send</button>
+      </div></div>
+      ${hiCtx ? `<div class="hint" style="margin-top:6px;color:var(--amber)">Context ${t.ctx}% full: /compact soon.</div>` : ""}</div>`;
+}
+function tline(t) {
+  const p = place();
+  if (!t) return `<div class="tline"><b>${esc(p.name)}</b><span class="meta">${p.kind === "general" ? "new question" : "new thread"}</span></div>`;
+  return `<div class="tline"><span class="dot s-${t.state}"></span><b class="mono">${t.id}</b><span class="ttl">${esc(t.title)}</span>
+    <span class="meta no-phone">· ${esc(p.name)}${dv() ? ` on ${p.machine}` : ""}</span>${p.deskdev ? '<span class="pill p-amber">main, not pushed</span>' : ""}<span class="sp"></span>
+    ${t.ctx != null ? `<span class="ctxm dev ${t.ctx >= 70 ? "hi" : ""}" title="Context used"><i><b style="width:${t.ctx}%"></b></i>${t.ctx}%</span><span class="meta dev no-phone">${t.tok}</span>` : ""}
+    ${t.kind && t.kind !== "ask" ? `<button class="ib dev" data-act="terminal" title="Open this thread in herdr-app (builder | adversary)">&gt;_</button>` : ""}
+    <button class="ib" data-menu="thread" title="Thread and project actions">⋮</button></div>`;
+}
+function out(t) {
+  if (!t) return `<div class="out"><div class="empty"><b style="color:var(--fg)">${place().kind === "general" ? "Ask a question" : "Start a thread"}</b><span>Type above. ${place().kind === "general" ? "Each question gets its own session; c: q-12 … continues an old one." : "Pick code or design; it gets its own worktree, builder and reviewer."}</span></div></div>`;
+  if (!t.kind) return `<div class="out">
+    <div class="turn"><div class="who"><span class="dot s-done"></span><b>Claude</b><span>· ${S.target}</span></div><div class="body"><div>For a Fedora home folder, the simplest reliable setup is <code>restic</code> to the HP box over SFTP, run by a systemd user timer every night. It deduplicates, encrypts, and you can mount snapshots to browse them.</div>
+      <details class="fold"><summary>4 steps · 2 web lookups</summary><div class="fb"><div class="step"><span class="ok">✓</span>web: restic sftp backend docs</div><div class="step"><span class="ok">✓</span>web: systemd user timers</div></div></details></div></div>
+    <div class="turn me"><div class="who">you</div><div class="body">${esc(t.title)}?</div></div></div>`;
+  const d = S.dispute;
+  if (t.id !== "code-3") return `<div class="out">
+    <div class="turn"><div class="who"><span class="dot s-${t.state}"></span><b>Builder</b><span class="dev">· Claude Code · ${S.builderModel}</span>${t.state === "blocked" ? '<span class="needs">· needs you</span>' : ""}</div>
+      <div class="body"><div>${t.state === "working" ? "Working: replacing the 700 ms poll in <code>live.ts</code> with one <code>hc events</code> stream…" : `Done with ${esc(t.title)}.`}</div>
+      <details class="fold"><summary>${t.state === "working" ? "9 steps so far" : "21 steps · 4 edits · tests passed"}</summary><div class="fb"><div class="step"><span class="ok">✓</span>read src/live.ts</div><div class="step"><span class="ok">✓</span>edit src/live.ts</div></div></details>
+      ${t.id === "code-4" ? `<div class="ask"><div>Move <code>desk.toml</code> into <code>~/agent-desk-settings</code> now, or keep a copy in the data repo for one release?</div><div class="acts"><button class="btn sm" data-act="answer">Move now</button><button class="btn sm" data-act="answer">Keep a copy</button></div></div>` : ""}</div></div>
+    <div class="turn me"><div class="who">you <span class="mono dev">browser[${t.id}]</span></div><div class="body">${esc(t.title)}.</div></div></div>`;
+  return `<div class="out">
+    <div class="turn"><div class="who"><span class="dot s-blocked"></span><b>Builder</b><span class="dev">· Claude Code · ${S.builderModel}</span><span class="needs">· needs you</span></div>
+      <div class="body">
+        <div>Added <code>HcMux</code> behind <code>MuxAdapter</code>. <code>createMux</code> tries hc first, then herdr 0.9.1, then direct. Terminals are labelled <code>desk.project</code>, <code>desk.thread</code>, <code>desk.role</code> and show up in herdr-app under the project's space.</div>
+        <details class="fold"><summary><span class="ok" style="color:var(--ok)">✓</span>14 steps · 3 edits · npm test 214 passed</summary><div class="fb">
+          <div class="step"><span class="ok">✓</span>read src/adapters/mux/herdr.ts</div><div class="step"><span class="ok">✓</span>edit <button class="flink" data-file="src/adapters/mux/hc.ts">src/adapters/mux/hc.ts</button> +112</div>
+          <div class="step"><span class="ok">✓</span>edit <button class="flink" data-file="src/adapters/mux/index.ts">src/adapters/mux/index.ts</button> +18 −4</div><div class="step"><span class="ok">✓</span>edit <button class="flink" data-file="src/types.ts">src/types.ts</button> +3 −1</div><div class="step"><span class="ok">✓</span>npm test · 214 passed</div></div></details>
+        <details class="fold dev"><summary><span class="dot" style="background:${d ? "var(--ok)" : "var(--amber)"}"></span>Review · Claude Code ${S.reviewModel}: 3 findings · 2 fixed and re-checked · ${d ? "1 settled by you" : "1 disputed"}</summary><div class="fb">
+          <div class="rvl"><span class="sev high">high</span><span><code>ensurePane</code> ignored the machine; after a move it would type into the old host. <b style="color:var(--ok)">Fixed, re-checked.</b></span></div>
+          <div class="rvl"><span class="sev med">med</span><span><code>hc ls</code> on every turn. <b style="color:var(--ok)">Fixed, re-checked</b>: one events stream.</span></div>
+          <div class="rvl"><span class="sev low">low</span><span>Split label <code>desk.key</code> into project + thread. ${d ? `<b>You: ${d}.</b>` : `<b class="needs">Disputed</b>: builder says herdr-app filters on <code>desk.key</code>.`}</span></div>
+          <span class="mute" style="font-size:11.5px">Written by the desk from the reviewer's verdict file, not by the builder.</span></div></details>
+        ${d ? "" : `<div class="ask dev"><div>Builder and reviewer disagree on one low finding. Your call:</div><div class="acts"><button class="btn sm" data-dispute="keep desk.key">Keep desk.key</button><button class="btn sm" data-dispute="split it">Split it</button></div></div>`}
+        <div class="ask"><div>Wants to run <code>rm -rf ~/.cache/herdr-core/t-old</code></div><div class="acts"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div>
+      </div></div>
+    <div class="turn me"><div class="who">you <span class="mono dev">browser[code-3]</span></div><div class="body">Add an hc mux adapter behind MuxAdapter. Keep herdr 0.9.1 as fallback. Label terminals so they show in herdr-app.</div></div></div>`;
+}
+function renderNotes() {
+  return `<div class="tline"><b>Notes</b><span class="meta">· today, all places</span><span class="sp"></span><button class="ib" data-act="closeView" title="Back to thread">×</button></div>
+    ${`<div class="box"><div class="cbox"><textarea placeholder="Add a note (turns are recorded automatically)" style="min-height:72px"></textarea><div class="crow"><span class="sp"></span><button class="btn pri send" data-act="note">Add note</button></div></div></div>`}
+    <div class="out">${[["21:04", "agent-desk / code-3", "builder blocked: approval"], ["20:58", "agent-desk / code-3", "review: 3 findings, 2 fixed"], ["20:31", "agent-desk / design-1", "committed 4a1c2e0"], ["19:50", "General / q-14", "asked: Fedora backup to HP box"], ["19:12", "you", "note: check hc 0.1.22 changelog"]]
+      .map(([a, b, c]) => `<div class="turn" style="max-width:none"><div class="who"><span class="mono">${a}</span><b>${b}</b></div><div class="body" style="padding:8px 12px">${c}</div></div>`).join("")}</div>`;
+}
+function renderUsage() {
+  const rows = [["agent-desk", "412k", "$4.10"], ["General", "88k", "$0.62"], ["sanatana-hub", "77k", "$0.71"], ["Desk dev", "28k", "$0.24"]];
+  return `<div class="tline"><b>Usage</b><span class="meta">· this week</span><span class="sp"></span><button class="ib" data-act="closeView" title="Back to thread">×</button></div>
+    <div class="out"><div class="turn" style="max-width:640px"><div class="body">${rows.map(([p, t, c]) => `<div style="display:flex;gap:12px"><b style="flex:1">${p}</b><span class="mono">${t}</span><span class="mono mute" style="width:56px;text-align:right">${c}</span></div>`).join("")}</div></div></div>`;
+}
+function renderMid() {
+  const t = thr();
+  $("mid").innerHTML = S.view === "notes" ? renderNotes() : S.view === "usage" ? renderUsage() : tline(t) + composer(t) + out(t);
+  const ta = $("msg");
+  if (ta) {
+    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+    ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(Math.max(ta.scrollHeight, phone() ? 96 : 128), innerHeight * 0.5) + "px"; });
+  }
+}
+
+// ================= right: one file =================
+const DIFFS = {
+  "src/adapters/mux/index.ts": [["@@", "-26,8 +26,18 @@ export async function createMux"], [" ", "  let handle: MuxHandle = { mode: \"none\", spawn: directSpawn };"], ["-", "  if (cfg.mux === \"herdr\") {"], ["+", "  if (cfg.mux === \"hc\" || cfg.mux === \"auto\") {"], ["+", "    try {"], ["+", "      const hc = await HcMux.connect({ machine: cfg.machine });"], ["+", "      return remember({ mode: \"hc\", spawn: hostedSpawn(hc, cfg.dataDir), hc });"], ["+", "    } catch (e: any) {"], ["+", "      note = `hc unavailable (${String(e?.message ?? e)}); trying herdr`;"], ["+", "    }"], ["+", "  }"], ["+", "  if (cfg.mux === \"herdr\" || cfg.mux === \"auto\") {"], [" ", "    try {"], [" ", "      await run(\"herdr\", [\"--version\"], { timeout: 5_000 });"]],
+  "src/types.ts": [["@@", "-70,7 +70,9 @@"], [" ", "export interface MuxAdapter {"], [" ", "  id: string;"], ["-", "  spawn(name: string, cmd: string[], cwd: string): Promise<PaneRef>;"], ["+", "  spawn(name: string, cmd: string[], cwd: string, labels?: Record<string, string>): Promise<PaneRef>;"], ["+", "  /** Run a command line inside an existing pane. */"], ["+", "  runIn(p: PaneRef, line: string): Promise<void>;"], [" ", "  write(p: PaneRef, data: string): Promise<void>;"]],
+};
+function diffOf(f) {
+  if (DIFFS[f.path]) return DIFFS[f.path];
+  if (f.st === "A") return [["@@", `-0,0 +1,${f.a} @@ new file`], ...["// " + f.path, "import { execFile } from \"node:child_process\";", "import { promisify } from \"node:util\";", "", "const run = promisify(execFile);", "", "export class HcMux implements MuxAdapter {", "  id = \"hc\";", "  constructor(private machine?: string) {}", "  async list() {", "    const { stdout } = await run(\"hc\", [\"ls\", \"--json\"]);", "    return JSON.parse(stdout).terminals;", "  }", "}"].map((l) => ["+", l])];
+  return [["@@", "-12,6 +12,8 @@"], [" ", "  // unchanged"], ["-", "  const timer = setInterval(poll, 700);"], ["+", "  const sub = await hc.events.subscribe();"], ["+", "  for await (const ev of sub) onEvent(ev);"], [" ", "  return () => stop();"]];
+}
+function renderRight() {
+  const app = $("app"), t = thr(), f = t && (FILES[t.id] || []).find((x) => x.path === S.file);
+  if (!f) { S.file = null; app.classList.add("no-right"); $("right").innerHTML = ""; return; }
+  app.classList.remove("no-right");
+  let o = 0, n = 0;
+  const diff = `<div class="code">${diffOf(f).map(([k, x]) => {
+    if (k === "@@") { const m = /-(\d+),\d+ \+(\d+)/.exec(x); if (m) { o = +m[1]; n = +m[2]; } return `<div class="hunk">@@ ${esc(x)}</div>`; }
+    const a = k === "+", d = k === "-", ol = a ? "" : o++, nl = d ? "" : n++;
+    return `<div class="ln ${a ? "add" : d ? "del" : ""}"><span>${ol}</span><span>${nl}</span><span class="sg">${a ? "+" : d ? "−" : " "}</span><span class="tx">${esc(x)}</span></div>`; }).join("")}</div>`;
+  const preview = `<div class="prev"><div style="display:flex;gap:8px;align-items:center"><span class="dot" style="background:var(--ok)"></span><b>Review · 3 findings · 2 fixed · 1 disputed</b></div><div class="mute" style="font-size:12.5px">Rendered design preview of ${esc(f.path)}.</div></div>`;
+  $("right").innerHTML = `<div class="rhead"><button class="ib only-phone" data-act="closeFile" aria-label="Back">‹</button><span class="st ${f.st} mono" style="font-weight:700">${f.st}</span><span class="path">${esc(f.path)}</span>
+      <span class="pill ${isSupport(f.path) ? "p-mute" : "p-ok"}">${isSupport(f.path) ? "supporting" : "output"}</span><button class="ib no-phone" data-act="closeFile" title="Close file">×</button></div>
+    <div class="rhead" style="min-height:36px">${f.design ? `<div class="seg"><button class="${S.fileMode === "preview" ? "on" : ""}" data-fmode="preview">Preview</button><button class="${S.fileMode !== "preview" ? "on" : ""}" data-fmode="diff">Diff</button></div>` : ""}
+      <span class="mute">Changes since</span><div class="seg"><button class="${S.diffBase === "branch" ? "on" : ""}" data-base="branch">thread start</button><button class="${S.diffBase === "last" ? "on" : ""}" data-base="last">my last message</button></div>
+      <span class="sp"></span><span class="mono"><span style="color:var(--ok)">+${f.a}</span> <span style="color:var(--warn)">${f.d ? "−" + f.d : ""}</span></span><button class="btn sm" data-act="openEditor">Open in editor</button></div>
+    <div class="rbody">${f.design && S.fileMode === "preview" ? preview : diff}</div>`;
+}
+
+// ================= overlays =================
+let palItems = [], palSel = 0;
+function palData(q) {
+  const out = [], ql = q.toLowerCase().trim();
+  if (ql.startsWith("?")) return [{ k: "web", label: `Search the web for “${q.slice(1).trim()}”`, s: "new tab", run: () => toast("Opens Google in a new tab") }];
+  const cmd = ql.startsWith(">"), qq = cmd ? ql.slice(1).trim() : ql;
+  const cmds = [["New code thread", "", () => newThread("code")], ["New design thread", "", () => newThread("design")], ["New question (General)", "", () => go("general", null)],
+    ["Notes: today", "", () => view("notes")], ["Usage", "", () => view("usage")], ["Schedules", "", () => toast("Schedules list: next run, last run, run now")],
+    ["Attach a project folder or URL", "", () => toast("Folder browser / URL")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
+    ["Settings (folder backed up to GitHub)", "", () => toast("Opens settings")], ["Toggle light / dark", "", theme], ["Toggle list", "Ctrl+B", () => act("toggleLeft")]];
+  if (!cmd) for (const p of visiblePlaces()) for (const t of THREADS[p.id] || []) if (!qq || (t.id + " " + t.title + " " + p.name).toLowerCase().includes(qq)) out.push({ k: "thread", label: `${t.id} · ${t.title}`, s: p.name, run: () => go(p.id, t.id) });
+  for (const [l, s, fn] of cmds) if (!qq || l.toLowerCase().includes(qq)) out.push({ k: "command", label: l, s, run: fn });
+  if (!cmd && qq.length > 2) out.push({ k: "history", label: `Search all turns and transcripts for “${q}”`, s: "History", run: () => toast("Full-text search results (History)") });
+  return out.slice(0, 14);
+}
+function renderPal() { palItems = palData($("palIn").value); palSel = Math.min(palSel, Math.max(0, palItems.length - 1));
+  $("palList").innerHTML = palItems.map((i, n) => `<button class="it ${n === palSel ? "on" : ""}" data-pi="${n}"><span class="k">${i.k}</span><span>${esc(i.label)}</span><span class="s">${esc(i.s)}</span></button>`).join("") || '<div class="mute" style="padding:12px">Nothing matches.</div>'; }
+function pal(on) { $("pal").classList.toggle("on", on); $("scrim").classList.toggle("on", on); if (on) { $("palIn").value = ""; palSel = 0; renderPal(); $("palIn").focus(); } }
+function menu(kind, anchor) {
+  const m = $("menu"), it = (b, sp, attrs = "") => `<button class="it" ${attrs}><b>${esc(b)}</b><span>${esc(sp)}</span></button>`;
+  let h = "";
+  if (kind === "more") {
+    const running = thr()?.state === "working";
+    h = `<div class="h only-phone" style="display:block">Turn</div>${phone() ? it("Stop", running ? "stop the running turn" : "nothing running", running ? 'data-act="stop"' : "disabled") + it("/compact", "summarize the session to free context", 'data-act="compact"') : ""}` +
+      Object.entries(AGENTS).map(([k, a]) => `<div class="h">${a.label}${a.installed ? "" : ` · not installed on ${place().machine}`}</div>` +
+        (k === "claude" ? [["/clear", "start the session fresh"], ["/model", "switch model"], ["/cost", "tokens and cost so far"], ["/<command>", "any command, passed as typed"]] : [["/diff", "working-tree diff"], ["/approvals", "what needs approval"], ["/<command>", "any command, passed as typed"]])
+          .map(([c, d]) => it(c, d, a.installed ? `data-cmd="${c}"` : "disabled")).join("")).join("") +
+      `<div class="h">Desk</div>` + it("Review now", "reviewer checks the current diff", 'data-act="reviewNow"') + it("c: <thread> message", "continue another thread or question", 'data-pfx="c: "') +
+      it("new: message", "separate session, not the open window", 'data-pfx="new: "') + it("mail: code-N message", "notice to another thread", 'data-pfx="mail: "') + it("Schedules", "scheduled prompts", 'data-act="schedules"');
+  } else if (kind === "thread") {
+    const t = thr();
+    const fs = (t && FILES[t.id]) || [];
+    h = (phone() && fs.length ? `<div class="h">Files</div>` + fs.map((f) => it(f.path.split("/").pop(), `${f.path} · +${f.a}${f.d ? " −" + f.d : ""}`, `data-file="${esc(f.path)}"`)).join("") : "") +
+      `<div class="h">Thread</div>` + it("Close / reopen", "fold away; nothing is deleted", 'data-act="close"') + (t?.kind && t.kind !== "ask" ? it("Open in herdr-app", "builder | reviewer panes", 'data-act="terminal"') + it("Commit and merge", "queued merge into main", 'data-act="merge"') : "") +
+      `<div class="h pow">Pair</div><div class="pow">${it("Builder: Claude Code · " + S.builderModel, "change agent or model", 'data-act="pair"')}${it("Reviewer: Claude Code · " + S.reviewModel, "Codex only if installed", 'data-act="pair"')}</div>` +
+      `<div class="h dev">Project</div><div class="dev">${it("Machine: " + place().machine, "move: save → kill → move → copy → start", 'data-act="move"')}${it("Project settings", "repo, context files, supporting-file rule", 'data-act="psettings"')}</div>` +
+      (place().deskdev ? `<div class="h">Desk dev</div>` + it("Restart desk", "after tests pass and you approve", 'data-act="restart"') + it("Roll back last commit", "on main", 'data-act="rollback"') : "");
+  } else if (kind === "me") {
+    h = `<div class="h">Profile</div>` + Object.entries(LEVELS).map(([k, l]) => `<button class="it ${S.level === k ? "on" : ""}" data-level="${k}"><b>${l}</b><span>${{ everyday: "General questions, notes, history", developer: "+ projects, code and design threads, files", power: "+ reviewer pair, machines, mail" }[k]}</span></button>`).join("") +
+      `<button class="it ${S.deskDev ? "on" : ""}" data-act="deskDev"><b>Desk developer</b><span>shows Desk dev (server decides; demo switch)</span></button>` +
+      `<div class="h">Desk</div>` + it("Light / dark", "follows the system until you pick", 'data-act="theme"') + it("Notes", "today, all places", 'data-act="notes"') + it("Usage", "tokens and cost", 'data-act="usage"') + it("Settings", "folder backed up to GitHub", 'data-act="settings"');
+  }
+  m.innerHTML = h; m.classList.add("on");
+  const r = anchor.getBoundingClientRect(), w = m.offsetWidth, hgt = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + "px";
+  m.style.top = (r.bottom + 6 + hgt > innerHeight ? Math.max(8, r.top - hgt - 6) : r.bottom + 6) + "px";
+}
+const closeMenu = () => $("menu").classList.remove("on");
+
+// ================= actions =================
+function go(p, t) { S.place = p; S.thread = t; S.view = "thread"; S.file = null; S.dispute = null; S.closed[p] = false; pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
+function openThreadScreen(on) { $("app").classList.toggle("thread-open", on); document.body.classList.toggle("thread-open", on); }
+function newThread(kind) { go(S.place === "general" ? "agent-desk" : S.place, null); setTimeout(() => { const s = document.querySelector('[data-sel="newKind"]'); if (s) s.value = kind; $("msg")?.focus(); }, 0); }
+function view(v) { S.view = v; pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
+function theme() { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const n = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = n; try { localStorage.setItem("theme", n); } catch {} }
+function send() {
+  const ta = $("msg"); const v = ta?.value.trim(); if (!v) return toast("Type a message");
+  const t = thr();
+  if (!t) { const list = THREADS[S.place] ||= []; const kind = document.querySelector('[data-sel="newKind"]')?.value ?? (S.place === "general" ? null : "ask");
+    const id = S.place === "general" ? `q-${15 + list.length}` : `${kind}-${7 + list.length}`; list.unshift({ id, title: v.slice(0, 60), state: "working", age: "now", kind: kind === "ask" ? "ask" : kind, ctx: 2, tok: "1k" }); go(S.place, id); return toast(`Started ${id}`); }
+  const o = document.querySelector(".out"); o.insertAdjacentHTML("afterbegin", `<div class="turn me"><div class="who">you <span class="mono dev">browser[${t.id}]</span></div><div class="body">${esc(v)}</div></div>`); ta.value = ""; o.scrollTop = 0;
+}
+function act(a, el) {
+  const T = { attach: "Pick a file or image (or paste, or Share to Desk on phone)", stop: "Stopped", compact: "/compact sent", allow: "Allowed once", allowAlways: "Allowed for this thread", deny: "Denied", answer: "Answer sent to builder",
+    terminal: "herdr-app opens space “" + place().name + "”, tab " + (thr()?.id ?? "") + ": builder | reviewer", reviewNow: "Reviewer checking the current diff", schedules: "Schedules list", close: "Thread folded away", merge: "Queued: merge into main after checks",
+    pair: "Pick agent first, then its models", move: "Move: save → kill → move → copy sessions → start", psettings: "Project settings", restart: "Restart needs tests passing + your OK", rollback: "Reverts last commit on main", settings: "Settings folder (GitHub-backed)", openEditor: "Opens in your editor", note: "Note added" };
+  switch (a) {
+    case "send": return send();
+    case "toggleLeft": S.left = !S.left; return layout();
+    case "filesMin": S.filesMin = !S.filesMin; return renderFiles();
+    case "closeFile": S.file = null; renderFiles(); return renderRight();
+    case "closeView": S.view = "thread"; return render();
+    case "needs": { const n = NEEDS[0]; return go(n.place, n.thread); }
+    case "theme": closeMenu(); return theme();
+    case "notes": return view("notes");
+    case "usage": return view("usage");
+    case "deskDev": S.deskDev = !S.deskDev; if (!S.deskDev && place().deskdev) go("agent-desk", "code-3"); closeMenu(); return render();
+  }
+  closeMenu(); toast(T[a] ?? a);
+}
+function layout() {
+  const app = $("app");
+  app.classList.toggle("no-left", !S.left && !phone());
+  app.style.setProperty("--lw", S.lw + "px"); app.style.setProperty("--rw", S.rw + "px"); $("left").style.setProperty("--fh", S.fh + "px");
+  document.body.className = "lv-" + S.level + ($("app").classList.contains("thread-open") ? " thread-open" : "");
+  $("needN").textContent = NEEDS.length;
+  persist();
+}
+function render() { renderTree(); renderFiles(); renderMid(); renderRight(); layout(); }
+
+// ================= events =================
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("button, .scrim");
+  if (!e.target.closest("#menu") && !(el && el.dataset.menu)) closeMenu();
+  if (!el) return;
+  const d = el.dataset;
+  if (el.id === "scrim") return pal(false);
+  if (el.id === "kbar") return pal(true);
+  if (el.id === "backBtn") { if (S.file) { S.file = null; renderFiles(); return renderRight(); } openThreadScreen(false); return; }
+  if (d.menu) return $("menu").classList.contains("on") ? closeMenu() : menu(d.menu, el);
+  if (d.go) { const [p, t] = d.go.split("|"); return go(p, t); }
+  if (d.tg) { S.closed[d.tg] = !S.closed[d.tg]; return renderTree(); }
+  if (d.new) { return go(d.new, null); }
+  if (d.file) { closeMenu(); S.file = d.file; renderFiles(); renderRight(); return layout(); }
+  if (d.fmode) { S.fileMode = d.fmode; return renderRight(); }
+  if (d.base) { S.diffBase = d.base; toast(d.base === "branch" ? "Diff since the thread's branch left main" : "Diff since your last message"); return renderRight(); }
+  if (d.dispute) { S.dispute = d.dispute; return renderMid(); }
+  if (d.level) { S.level = d.level; if (!dv() && S.place !== "general") { S.place = "general"; S.thread = "q-14"; } closeMenu(); return render(); }
+  if (d.cmd) { closeMenu(); if (d.cmd === "/<command>") { const ta = $("msg"); ta.value = "/" + ta.value; return ta.focus(); } return toast(`${d.cmd} sent as typed`); }
+  if (d.pfx) { closeMenu(); const ta = $("msg"); if (!ta.value.startsWith(d.pfx)) ta.value = d.pfx + ta.value; return ta.focus(); }
+  if (d.pi) return palItems[+d.pi].run();
+  if (d.act) return act(d.act, el);
+});
+document.addEventListener("change", (e) => { const s = e.target.dataset?.sel; if (s === "target") { S.target = e.target.value; persist(); } });
+$("palIn").addEventListener("input", () => { palSel = 0; renderPal(); });
+$("palIn").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { palSel = Math.min(palSel + 1, palItems.length - 1); renderPal(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { palSel = Math.max(palSel - 1, 0); renderPal(); e.preventDefault(); }
+  else if (e.key === "Enter" && palItems[palSel]) palItems[palSel].run();
+});
+document.addEventListener("keydown", (e) => {
+  const c = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (c && k === "k") { e.preventDefault(); pal(!$("pal").classList.contains("on")); }
+  else if (c && k === "b") { e.preventDefault(); act("toggleLeft"); }
+  else if (e.key === "Escape") { pal(false); closeMenu(); if (S.file) { S.file = null; renderFiles(); renderRight(); } }
+  else if (e.key === "/" && !e.target.closest("textarea, input")) { e.preventDefault(); $("msg")?.focus(); }
+});
+document.addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".sash"); if (!el) return;
+  const k = el.dataset.sash, vert = k === "fh", start = vert ? e.clientY : e.clientX, from = S[k];
+  el.classList.add("drag"); el.setPointerCapture(e.pointerId);
+  const mv = (ev) => { const dd = (vert ? ev.clientY : ev.clientX) - start; S[k] = Math.max(vert ? 80 : 200, Math.min(vert ? innerHeight - 200 : 900, k === "lw" ? from + dd : from - dd)); layout(); };
+  const up = () => { el.classList.remove("drag"); el.removeEventListener("pointermove", mv); el.removeEventListener("pointerup", up); };
+  el.addEventListener("pointermove", mv); el.addEventListener("pointerup", up);
+});
+// demo deep links: ?place=agent-desk&thread=code-3&file=src/types.ts&theme=dark&level=everyday&open=1
+{ const q = new URLSearchParams(location.search);
+  if (q.get("theme")) document.documentElement.dataset.theme = q.get("theme");
+  if (q.get("level")) S.level = q.get("level");
+  if (q.get("place")) { S.place = q.get("place"); S.thread = q.get("thread"); }
+  if (q.get("file")) S.file = q.get("file");
+  if (q.get("open") && phone()) openThreadScreen(true); }
+render();
+</script>
+</body>
+</html>
