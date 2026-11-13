@@ -13,8 +13,8 @@
 // desk's own cgroup, so they survive the restart they cause. The script leaves its verdict in
 // <data>/.index/desk-apply-result.json and the restarted desk picks it up.
 // Nothing is pushed.
-import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, cpSync, unlinkSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, cpSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { git } from "./worktree.js";
 import { DESK_REPO } from "./self-dev.js";
@@ -56,9 +56,17 @@ export const runCmd: Run = (cmd, cwd) =>
 
 const tail = (s: string) => s.trim().split("\n").slice(-5).join(" | ");
 
-/** A worktree of the desk repo shares the repo's node_modules (build and tests need them). */
+/**
+ * A worktree of the desk repo shares the repo's node_modules (build and tests need them).
+ * The link is a file to git, so a `node_modules/` ignore rule misses it: it goes into
+ * info/exclude too, or the merge queue's `git add -A` would commit it.
+ */
 export function linkDeps(repo: string, worktree: string): void {
   const src = join(repo, "node_modules"), dst = join(worktree, "node_modules");
+  const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: worktree }).toString().trim();
+  const excl = join(common, "info", "exclude");
+  const cur = existsSync(excl) ? readFileSync(excl, "utf8") : "";
+  if (!/^\/?node_modules$/m.test(cur)) { mkdirSync(dirname(excl), { recursive: true }); appendFileSync(excl, (cur && !cur.endsWith("\n") ? "\n" : "") + "/node_modules\n"); }
   if (existsSync(src) && !existsSync(dst)) symlinkSync(src, dst, "dir");
 }
 

@@ -119,3 +119,16 @@ test("desk-apply.sh: healthy new build stays; unhealthy one is rolled back to th
     assert.equal(readFileSync(join(d, "a.txt"), "utf8"), "old\n");
   }
 });
+
+test("linkDeps: worktree shares node_modules and git never sees the link", async () => {
+  const { d } = await repo();
+  mkdirSync(join(d, "node_modules", "x"), { recursive: true });
+  const { ensureWorktree } = await import("../src/worktree.js");
+  const { linkDeps } = await import("../src/desk-apply.js");
+  const wt = await ensureWorktree(d, "code-2");
+  linkDeps(d, wt.worktree);
+  linkDeps(d, wt.worktree); // idempotent
+  assert.ok(existsSync(join(wt.worktree, "node_modules", "x")));
+  assert.equal((await git(wt.worktree, ["status", "--porcelain"])).trim(), "");
+  assert.equal((await git(d, ["status", "--porcelain"])).trim(), "");
+});
