@@ -534,7 +534,7 @@ function menu(kind, anchor) {
   } else if (kind === "me") {
     h = `<div class="h">Profile</div>` + Object.entries(LEVELS).map(([k, l]) => `<button class="it ${S.level === k ? "on" : ""}" data-level="${k}"><b>${l}</b><span>${{ everyday: "General questions, notes, history", developer: "+ projects, code and design threads, files", power: "+ reviewer pair, machines, mail" }[k]}</span></button>`).join("") +
       `<button class="it ${S.deskDev ? "on" : ""}" data-act="deskDev"><b>Desk developer</b><span>shows Desk dev (server decides; demo switch)</span></button>` +
-      `<div class="h">Desk</div>` + it("Light / dark", "follows the system until you pick", 'data-act="theme"') + it("Notes", "today, all places", 'data-act="notes"') + it("Usage", "tokens and cost", 'data-act="usage"') + it("Settings", "folder backed up to GitHub", 'data-act="settings"');
+      `<div class="h">Desk</div>` + it("Light / dark", "follows the system until you pick", 'data-act="theme"') + it("Notes", "today, all places", 'data-act="notes"') + it("Usage", "tokens and cost", 'data-act="usage"') + it("Settings", "folder backed up to GitHub", 'data-act="settings"') + it("Classic desk", "attach projects, notes, schedules, sessions, terminal", 'data-act="classic"');
   }
   m.innerHTML = h; m.classList.add("on");
   const r = anchor.getBoundingClientRect(), w = m.offsetWidth, hgt = m.offsetHeight;
@@ -594,6 +594,7 @@ function act(a, el) {
     case "closeView": S.view = "thread"; return render();
     case "needs": { const n = NEEDS[0]; return go(n.place, n.thread); }
     case "theme": closeMenu(); return theme();
+    case "classic": location.href = "/" + location.hash; return;
     case "notes": return view("notes");
     case "usage": return view("usage");
     case "deskDev": S.deskDev = !S.deskDev; if (!S.deskDev && place().deskdev) go("agent-desk", "code-3"); closeMenu(); return render();
