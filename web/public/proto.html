@@ -240,6 +240,11 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .code .tx { padding-right: 12px; }
 .preview { margin: 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--sunk); }
 
+.pop { position: fixed; z-index: 35; width: 340px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--pop); padding: 12px; display: none; flex-direction: column; gap: 10px; }
+.pop.open { display: flex; }
+.pop .pt { display: flex; align-items: center; gap: 8px; }
+.pop .lead { gap: 6px; }
+
 /* status bar */
 .status { height: 24px; flex: none; background: var(--status); color: var(--status-fg); display: flex; align-items: center; gap: 2px; font-size: 12px; padding: 0 6px; }
 .status button { border: 0; background: none; color: inherit; height: 100%; padding: 0 8px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -297,7 +302,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
     <button data-view="search" title="Search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
     <button data-view="machines" class="pow" title="Machines"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
     <span class="sep"></span>
-    <button data-view="right" title="Context panel (Ctrl+Alt+B)" class="dev"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button>
+    <button data-view="right" title="File panel (Ctrl+Alt+B)" class="dev"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></button>
     <button data-view="bottom" title="Bottom panel (Ctrl+J)" class="dev"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 14h18"/></svg></button>
     <button data-view="settings" title="Settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
   </nav>
@@ -314,7 +319,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
         <div class="cbox">
           <textarea id="msg" rows="5" placeholder="Message (Ctrl+Enter to send)"></textarea>
           <div class="crow">
-            <span class="pfx dev" id="pfx"></span><span class="mute" style="font-size:12px" id="cHint"></span>
+            <span class="pfx dev" id="pfx"></span><button class="model" style="font-size:12px" id="cHint" data-pop="pair" type="button"></button>
             <div class="spacer"></div>
             <button class="btn sm dev" id="reviewNow" type="button">Review now</button>
             <div class="split">
@@ -339,13 +344,14 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
     </div>
   </div>
   <div class="sash s3 dev" data-sash="right"></div>
-  <aside class="rpanel dev" id="right"><div class="phead" style="padding-left:4px"><div class="rtabs" id="rtabs"></div><button class="ib" data-act="hideRight" title="Collapse (Ctrl+Alt+B)">›</button></div><div class="pbody" id="rightBody"></div></aside>
+  <aside class="rpanel dev" id="right"><div class="phead" style="padding-left:4px"><div class="rtabs" id="rtabs"></div><button class="ib" data-act="hideRight" title="Close file (Ctrl+Alt+B)">×</button></div><div class="pbody" id="rightBody"></div></aside>
 </div>
 <footer class="status" id="status"></footer>
 
 <div class="scrim" id="scrim"></div>
 <div class="drawer" id="drawer" role="dialog" aria-label="Needs you"><div class="dh"><b>Needs you</b><button class="btn ghost sm" id="drawerX" type="button">Close</button></div><div class="db" id="drawerBody"></div></div>
 <div class="pal" id="pal" role="dialog" aria-label="Command palette"><input id="palIn" placeholder="Type a thread, project or command…" autocomplete="off" /><div class="list" id="palList"></div></div>
+<div class="pop" id="pop" role="dialog"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -399,9 +405,9 @@ const D = {
   ],
 };
 const stateWord = { working: "working", blocked: "needs you", review: "in review", done: "done", idle: "idle", queued: "queued", waiting: "waiting on claim" };
-const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem("proto2." + k)); return v ?? d; } catch { return d; } };
-const save = (k, v) => { try { localStorage.setItem("proto2." + k, JSON.stringify(v)); } catch {} };
-const S = Object.assign({ profile: "power", project: "agent-desk", thread: "code-3", view: "threads", side: true, right: true, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, rightTab: "project", file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
+const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem("proto3." + k)); return v ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem("proto3." + k, JSON.stringify(v)); } catch {} };
+const S = Object.assign({ profile: "power", project: "agent-desk", thread: "code-3", view: "threads", side: true, right: false, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
 S.findings = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -592,7 +598,7 @@ function renderEditor() {
   $("th").innerHTML = `<h2>${dv() ? `<span class="mono" style="font-size:14px">${t.id}</span> · ` : ""}${esc(t.title)}</h2>
     <span class="chip"><span class="dot s-${t.state}"></span>${stateWord[t.state]}</span>
     <span class="chip dev">${t.tok} tokens</span>${t.claims ? `<span class="chip pow">holds ${t.claims} claim${t.claims > 1 ? "s" : ""}</span>` : ""}
-    <div class="spacer"></div><button class="btn sm dev" data-act="viewTerm">${S.bottom && S.btab === "terminals" ? "Hide terminal" : "View terminal"}</button><button class="btn sm pow" data-act="herdr">Open in herdr-app</button>`;
+    ${proj().dev ? `<span class="chip" style="border-color:var(--amber);color:var(--amber)">desk dev · commits to main, not pushed</span><button class="btn sm" data-act="restart">Restart desk…</button><button class="btn sm" data-act="rollback">Roll back</button>` : ""}<div class="spacer"></div><button class="btn sm dev" data-act="viewTerm">${S.bottom && S.btab === "terminals" ? "Hide terminal" : "View terminal"}</button><button class="btn sm pow" data-act="herdr">Open in herdr-app</button>`;
   const rv = t.state === "review", steps = [["Plan", "done"], ["Build", "done"], ["Checkpoint: diff ready", "done"], ["Adversary review", rv ? "now" : t.verdict === "pass" ? "done" : ""], ["You decide", t.state === "blocked" ? "now" : ""], ["Commit", t.state === "done" ? "done" : ""]];
   $("loop").innerHTML = steps.map(([n, k], i) => `${i ? '<span class="sep"></span>' : ""}<span class="st ${k}"><span class="n">${k === "done" ? "✓" : i + 1}</span>${n}</span>`).join("") + `<span class="spacer" style="min-width:16px"></span><span class="mute" style="white-space:nowrap">review at checkpoints, not every message</span>`;
 
@@ -647,40 +653,57 @@ function renderBottom() {
 }
 
 // ---------- right panel ----------
+// Right pane shows the selected file only; everything else lives in status-bar pop-ups.
 function renderRight() {
-  const fileOk = S.file && filesOf(thr()).some((x) => x.path === S.file);
-  if (!fileOk) { S.file = null; if (S.rightTab === "file") S.rightTab = "project"; }
-  $("rtabs").innerHTML = `<button class="rtab ${S.rightTab === "project" ? "on" : ""}" data-rtab="project">Project</button>${S.file ? `<button class="rtab ${S.rightTab === "file" ? "on" : ""}" data-rtab="file" title="${esc(S.file)}">${esc(S.file.split("/").pop())}</button>` : ""}`;
-  if (S.rightTab === "file") { $("rightBody").innerHTML = renderFileView(); return; }
-  const p = proj(), [B, A] = leads(), total = D.context.reduce((s, c) => s + c.tok, 0);
-  const colors = ["var(--acc)", "var(--blue)", "var(--ok)", "var(--amber)", "var(--warn)", "var(--mute)"];
-  $("rightBody").innerHTML = `
-    ${p.dev ? `<div class="in" style="padding:10px 12px 0"><div class="dev-note"><b style="color:var(--amber)">Desk dev · own session "${p.session}"</b><span>Separate herdr session on ${p.machine}, apart from project work. Commits to main, never pushed. Restart only after tests pass and you approve.</span><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="restart">Restart desk…</button><button class="btn sm" data-act="rollback">Roll back last commit</button></div></div></div>` : ""}
-    <details class="sec pow" open><summary>Pair<span class="r"><button class="btn ghost sm" data-act="swap">⇄ Swap</button></span></summary><div class="in">
-      ${[B, A].map((l) => `<div class="lead ${l.cls}"><div class="r"><span class="role">${l.role}</span></div>
-        <select class="btn sm" data-agent="${l.key}" aria-label="${l.role} agent">${Object.entries(AGENTS).map(([k, a]) => `<option value="${k}" ${S.pair[l.key].agent === k ? "selected" : ""} ${a.installed ? "" : "disabled"}>${a.label}${a.installed ? "" : " (not installed)"}</option>`).join("")}</select>
-        <select class="btn sm" data-model="${l.key}" aria-label="${l.role} model">${AGENTS[S.pair[l.key].agent].models.map((m) => `<option ${m === l.model ? "selected" : ""}>${m}</option>`).join("")}</select></div>`).join("")}
-      <span class="mute" style="font-size:12px">Codex not installed on ${p.machine}: adversary is a second Claude.</span></div></details>
-    <details class="sec dev" open><summary>Agent and model</summary><div class="in" style="font-size:12.5px">
-      <div class="claim"><span style="flex:1">Builder</span><span class="mute">${B.agent} ·</span> <b>${B.model}</b></div>
-      <div class="claim"><span style="flex:1">Review</span><span class="mute">${A.agent} ·</span> <b>${A.model}</b></div>
-      <span class="mute" style="font-size:12px">Models listed are the ones the chosen agent offers.</span></div></details>
-    <details class="sec dev" open><summary>herdr session</summary><div class="in">
-      <div class="mach"><span class="dot ${S.sess[p.id] === "none" ? "s-idle" : "s-done"}"></span><div style="flex:1;min-width:0"><b class="mono">${p.session}</b><div class="mute">${S.sess[p.id] === "none" ? "not running" : `${S.sess[p.id]} · ${p.machine} · 2 panes, split vertical`}</div></div><button class="btn sm pow" data-act="move">Move…</button></div>
-      ${S.sess[p.id] === "none" ? `<div style="display:flex;gap:6px"><button class="btn pri sm" data-act="launch">Launch</button><button class="btn sm" data-act="attach">Attach existing…</button></div>` : `<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="viewTerm">${S.bottom && S.btab === "terminals" ? "Hide terminal" : "View terminal"}</button><button class="btn sm pow" data-act="herdr">Open in herdr-app</button><button class="btn ghost sm" data-act="detach">Detach</button></div>`}
-      <span class="mute" style="font-size:12px">Left pane Claude, right pane Codex (second Claude until installed). The desk's terminal is only a view of these panes.</span></div></details>
-    <details class="sec dev" open><summary>Context pack<span class="r mute">${total.toFixed(1)}k tok</span></summary><div class="in">
-      <div class="meter">${D.context.map((c, i) => `<i style="width:${(c.tok / total) * 100}%;background:${colors[i]}"></i>`).join("")}</div>
-      <div class="ctx">${D.context.map((c, i) => `<div class="row"><span><span class="dot" style="background:${colors[i]};margin-right:6px"></span>${c.what}</span><span class="mute">${c.tok}k</span><span class="${c.stale ? "stale" : "mute"}">${c.age}</span></div>`).join("")}</div>
-      <button class="btn sm" data-act="refreshCtx">Refresh stale summaries</button></div></details>`;
+  if (S.file && !filesOf(thr()).some((x) => x.path === S.file)) S.file = null;
+  $("rtabs").innerHTML = `<span class="rtab on" style="cursor:default">File</span>`;
+  $("rightBody").innerHTML = S.file ? renderFileView() : `<div class="mute" style="padding:16px;font-size:12.5px">Click a file under Files on the left to see it here.</div>`;
 }
+
+// ---------- pop-ups (pair, session, context) ----------
+function popPair() {
+  const p = proj(), [B, A] = leads();
+  return `<div class="pt"><b>Pair</b><span class="spacer"></span><button class="btn ghost sm" data-act="swap">⇄ Swap roles</button></div>
+    ${[B, A].map((l) => `<div class="lead ${l.cls}"><span class="role">${l.role}</span>
+      <div style="display:flex;gap:6px"><select class="btn sm" style="flex:1" data-agent="${l.key}" aria-label="${l.role} agent">${Object.entries(AGENTS).map(([k, a]) => `<option value="${k}" ${S.pair[l.key].agent === k ? "selected" : ""} ${a.installed ? "" : "disabled"}>${a.label}${a.installed ? "" : ` (not on ${p.machine})`}</option>`).join("")}</select>
+      <select class="btn sm" style="flex:1" data-model="${l.key}" aria-label="${l.role} model">${AGENTS[S.pair[l.key].agent].models.map((m) => `<option ${m === l.model ? "selected" : ""}>${m}</option>`).join("")}</select></div></div>`).join("")}`;
+}
+function popSession() {
+  const p = proj(), st = S.sess[p.id];
+  return `<div class="pt"><span class="dot ${st === "none" ? "s-idle" : "s-done"}"></span><b class="mono">${p.session}</b><span class="mute">${st === "none" ? "not running" : `${st} · ${p.machine}`}</span></div>
+    <div class="mute" style="font-size:12px">${st === "none" ? "No herdr session for this project." : "2 panes, split vertical: Claude | Codex (second Claude until installed)."}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${st === "none" ? `<button class="btn pri sm" data-act="launch">Launch</button><button class="btn sm" data-act="attach">Attach existing…</button>` :
+      `<button class="btn sm" data-act="viewTerm">${S.bottom && S.btab === "terminals" ? "Hide terminal" : "View terminal"}</button><button class="btn sm pow" data-act="herdr">Open in herdr-app</button><button class="btn ghost sm" data-act="detach">Detach</button>`}
+      <button class="btn sm pow" data-act="move">Move to another machine…</button></div>`;
+}
+function popContext() {
+  const total = D.context.reduce((s, c) => s + c.tok, 0), colors = ["var(--acc)", "var(--blue)", "var(--ok)", "var(--amber)", "var(--warn)", "var(--mute)"];
+  return `<div class="pt"><b>Context pack</b><span class="spacer"></span><span class="mute">${total.toFixed(1)}k tokens</span></div>
+    <div class="meter">${D.context.map((c, i) => `<i style="width:${(c.tok / total) * 100}%;background:${colors[i]}"></i>`).join("")}</div>
+    <div class="ctx">${D.context.map((c, i) => `<div class="row"><span><span class="dot" style="background:${colors[i]};margin-right:6px"></span>${c.what}</span><span class="mute">${c.tok}k</span><span class="${c.stale ? "stale" : "mute"}">${c.age}</span></div>`).join("")}</div>
+    <button class="btn sm" data-act="refreshCtx">Refresh stale summaries</button>`;
+}
+let popKind = null, popAnchor = null;
+function openPop(kind, anchor) {
+  const el = $("pop");
+  if (popKind === kind && el.classList.contains("open")) return closePop();
+  popKind = kind; popAnchor = anchor;
+  el.innerHTML = { pair: popPair, session: popSession, context: popContext }[kind]();
+  el.classList.add("open");
+  const a = anchor.getBoundingClientRect(), w = el.offsetWidth;
+  el.style.left = Math.max(8, Math.min(a.left, innerWidth - w - 8)) + "px";
+  if (a.top > innerHeight / 2) { el.style.top = ""; el.style.bottom = (innerHeight - a.top + 6) + "px"; } else { el.style.bottom = ""; el.style.top = (a.bottom + 6) + "px"; }
+}
+function closePop() { $("pop").classList.remove("open"); popKind = null; }
+function refreshPop() { if (popKind) $("pop").innerHTML = { pair: popPair, session: popSession, context: popContext }[popKind](); }
 
 // ---------- status bar ----------
 function renderStatus() {
   const p = proj(), t = thr();
-  $("status").innerHTML = `<button data-act="move">⌂ ${p.machine}</button><button data-act="session" class="pow">session ${p.session}</button>
+  const [B, A] = leads(), ctx = D.context.reduce((s, c) => s + c.tok, 0);
+  $("status").innerHTML = `<button data-pop="session" class="dev"><span class="dot ${S.sess[p.id] === "none" ? "s-idle" : "s-done"}"></span>${p.machine} · ${p.session}</button>
     <button class="dev">⎇ t/${t.id}</button><button class="pow" data-view="mailbox">✉ ${D.mail.filter((m) => m.unread).length}</button>
-    <span class="spacer"></span><button class="pow">${D.cap.running}/${D.cap.max} threads</button><button class="dev">${t.tok} tok</button>
+    <span class="spacer"></span><button class="pow" data-pop="pair">${B.model} ⇄ ${A.model}</button><button class="dev" data-pop="context">ctx ${ctx.toFixed(1)}k</button><button class="pow">${D.cap.running}/${D.cap.max} threads</button><button class="dev">${t.tok} tok</button>
     <button id="inboxBtn2">⚠ 2 need you</button><button data-act="profile">${PROFILES[S.profile].label}</button>`;
 }
 
@@ -735,27 +758,28 @@ function act(a) {
   if (a === "swap") { S.swapped = !S.swapped; render(); return toast("Roles swapped"); }
   if (a === "dismissAll") { FINDINGS.forEach((f) => (S.findings[f.id] ??= "dismissed")); renderEditor(); renderBottom(); return; }
   if (a === "hideSide") { S.side = false; return applyLayout(); }
-  if (a === "hideRight") { S.right = false; return applyLayout(); }
+  if (a === "hideRight") { S.right = false; S.file = null; renderFiles(); renderRight(); return applyLayout(); }
   if (a === "hideBottom") { S.bottom = false; S.maxBottom = false; return applyLayout(); }
   if (a === "maxBottom") { S.maxBottom = !S.maxBottom; renderBottom(); return applyLayout(); }
   if (a === "theme") { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const n = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = n; try { localStorage.setItem("theme", n); } catch {} return applyLayout(); }
   toast(msgs[a] ?? a);
 }
-function render() { renderHeader(); renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); renderDrawer(); applyLayout(); }
+function render() { refreshPop(); renderHeader(); renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); renderDrawer(); applyLayout(); }
 
 document.addEventListener("click", (e) => {
   const el = e.target.closest("button, .scrim, .x");
   const keep = el && (el.id === "projBtn" || el.id === "profBtn" || el.id === "sendMore");
   if (!keep) document.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
+  if (popKind && !e.target.closest("#pop") && !(el && el.dataset.pop)) closePop();
   if (!el) return;
   if (el.id === "projBtn") return $("projMenu").classList.toggle("open");
   if (el.id === "profBtn") return $("profMenu").classList.toggle("open");
   if (el.id === "sendMore") return $("sendMenu").classList.toggle("open");
   if (el.dataset.p) return go(el.dataset.p);
   if (el.dataset.prof) return setProfile(el.dataset.prof);
-  if (el.dataset.t) { S.thread = el.dataset.t; S.file = null; S.rightTab = "project"; S.findings = {}; renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); persist(); return; }
-  if (el.dataset.file) { S.file = el.dataset.file; S.rightTab = "file"; S.right = true; if (S.sizes.right < 460) S.sizes.right = 520; renderFiles(); renderRight(); return applyLayout(); }
-  if (el.dataset.rtab) { S.rightTab = el.dataset.rtab; return renderRight(); }
+  if (el.dataset.t) { S.thread = el.dataset.t; S.file = null; S.right = false; S.findings = {}; renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); return applyLayout(); }
+  if (el.dataset.file) { S.file = el.dataset.file; S.right = true; if (S.sizes.right < 460) S.sizes.right = 520; renderFiles(); renderRight(); return applyLayout(); }
+  if (el.dataset.pop) return openPop(el.dataset.pop, el);
   if (el.dataset.tg) { S.target = el.dataset.tg; return renderEditor(); }
   if (el.dataset.btab) { S.btab = el.dataset.btab; renderBottom(); return persist(); }
   if (el.dataset.view) return toggleView(el.dataset.view === "side" ? S.view : el.dataset.view);
@@ -774,6 +798,7 @@ document.addEventListener("change", (e) => {
   const el = e.target;
   if (el.dataset.agent) { const k = el.dataset.agent; S.pair[k] = { agent: el.value, model: AGENTS[el.value].models[0] }; render(); }
   else if (el.dataset.model) { S.pair[el.dataset.model].model = el.value; render(); }
+  refreshPop();
 });
 // Grow with the text, up to 45% of the screen; drag the corner to resize by hand.
 $("msg").addEventListener("input", (e) => { const t = e.target; t.style.height = "auto"; t.style.height = Math.min(Math.max(t.scrollHeight, 120), innerHeight * 0.45) + "px"; });
@@ -798,8 +823,9 @@ if (innerWidth <= 760) { S.side = false; S.right = false; S.bottom = false; }
 { const q = new URLSearchParams(location.search);
   if (q.get("theme")) document.documentElement.dataset.theme = q.get("theme");
   if (q.get("thread")) S.thread = q.get("thread");
-  if (q.get("file")) { S.file = q.get("file"); S.rightTab = "file"; S.right = true; S.sizes.right = Math.max(S.sizes.right, 520); } }
+  if (q.get("file")) { S.file = q.get("file"); S.right = true; S.sizes.right = Math.max(S.sizes.right, 520); } }
 render();
+{ const k = new URLSearchParams(location.search).get("pop"); if (k) openPop(k, document.querySelector(`#status [data-pop="${k}"]`)); }
 </script>
 </body>
 </html>
