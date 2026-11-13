@@ -166,7 +166,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .fnd.accepted .txt { opacity: .6; } .fnd.dismissed .txt { opacity: .4; text-decoration: line-through; }
 .diff { font-family: var(--mono); font-size: 12px; background: var(--sunk); border-radius: 8px; padding: 7px 10px; white-space: pre; overflow-x: auto; }
 .diff .a { color: var(--ok); } .diff .d { color: var(--warn); }
-.composer { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 10px; flex: none; }
+.composer { border-bottom: 1px solid var(--line); background: var(--panel); padding: 8px 16px 10px; flex: none; }
 .cbox { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--card); padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
 .cbox:focus-within { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
 .cbox textarea { border: 0; outline: 0; resize: none; background: transparent; min-height: 40px; }
@@ -175,7 +175,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .split { display: inline-flex; position: relative; }
 .split .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .split .btn:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(255,255,255,.3); padding: 2px 8px; }
-.split .menu { left: auto; right: 0; top: auto; bottom: calc(100% + 6px); min-width: 230px; }
+.split .menu { left: auto; right: 0; top: calc(100% + 6px); min-width: 230px; }
 
 /* bottom panel */
 .bottom { height: var(--bottom-h, 230px); flex: none; background: var(--panel); border-top: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -309,10 +309,9 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
       <div class="etabs" id="etabs"></div>
       <div class="th" id="th"></div>
       <div class="loop dev" id="loop"></div>
-      <div id="feed"></div>
       <div class="composer">
         <div class="cbox">
-          <textarea id="msg" rows="2" placeholder="Message…  (Enter sends, Shift+Enter new line)"></textarea>
+          <textarea id="msg" rows="2" placeholder="Message (Ctrl+Enter to send)"></textarea>
           <div class="crow">
             <span class="pfx dev" id="pfx"></span><span class="mute" style="font-size:12px" id="cHint"></span>
             <div class="spacer"></div>
@@ -330,6 +329,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
           </div>
         </div>
       </div>
+      <div id="feed"></div>
     </div>
     <div class="sash h dev" data-sash="bottom"></div>
     <div class="bottom dev" id="bottom">
@@ -611,6 +611,8 @@ function renderEditor() {
       <div class="ch" style="border-top:1px solid var(--line);border-bottom:0"><span class="mute" style="font-size:12.5px">${open ? `${open} open · fixes go back to the builder` : "All handled."}</span><div class="spacer"></div><button class="btn sm" data-act="dismissAll">Dismiss all</button><button class="btn pri sm" data-act="sendFixes">Send fixes to builder</button></div></div>
     <div class="card approve"><div class="ch"><span class="dot s-blocked"></span><b>${dv() ? "Builder" : "Claude"} wants to run</b><span class="mute pow">hp/t12</span></div>
       <div class="cb"><div class="diff">rm -rf ~/.cache/herdr-core/t-old</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div></div>`;
+  // Text box sits on top, so newest turn goes right under it (same as the current desk).
+  const fd = $("feed"); fd.append(...[...fd.children].reverse()); fd.scrollTop = 0;
   $("pfx").textContent = `browser[${t.id}]:`;
   $("cHint").textContent = !pw() ? "" : { builder: `to builder · ${B.model}`, adversary: `to adversary · ${A.model}`, both: "to both leads", mail: "as mail to another thread" }[S.target];
   $("sendBtn").textContent = !pw() ? "Send" : { builder: "Send to builder", adversary: "Send to adversary", both: "Send to both", mail: "Send mail" }[S.target];
@@ -766,7 +768,7 @@ document.addEventListener("click", (e) => {
     case "drawerX": case "scrim": openDrawer(false); openPal(false); return;
     case "kbar": return openPal(true);
     case "reviewNow": return toast("Adversary reviewing current diff…");
-    case "sendBtn": { const v = $("msg").value.trim(); if (!v) return toast("Type a message"); $("feed").insertAdjacentHTML("beforeend", `<div class="turn me"><div class="who">you${pw() ? ` · <span class="mono">browser[${thr().id}]</span> → ${S.target}` : ""}</div><div class="body">${esc(v)}</div></div>`); $("msg").value = ""; $("feed").scrollTop = 1e9; return; }
+    case "sendBtn": { const v = $("msg").value.trim(); if (!v) return toast("Type a message"); $("feed").insertAdjacentHTML("afterbegin", `<div class="turn me"><div class="who">you${pw() ? ` · <span class="mono">browser[${thr().id}]</span> → ${S.target}` : ""}</div><div class="body">${esc(v)}</div></div>`); $("msg").value = ""; $("feed").scrollTop = 0; return; }
   }
 });
 document.addEventListener("change", (e) => {
@@ -774,7 +776,7 @@ document.addEventListener("change", (e) => {
   if (el.dataset.agent) { const k = el.dataset.agent; S.pair[k] = { agent: el.value, model: AGENTS[el.value].models[0] }; render(); }
   else if (el.dataset.model) { S.pair[el.dataset.model].model = el.value; render(); }
 });
-$("msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("sendBtn").click(); } });
+$("msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("sendBtn").click(); } });
 $("palIn").addEventListener("input", () => { palSel = 0; renderPal(); });
 $("palIn").addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown") { palSel = Math.min(palSel + 1, palItems.length - 1); renderPal(); e.preventDefault(); }
