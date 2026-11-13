@@ -36,6 +36,8 @@ import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
+import { Pairs } from "./pair.js";
+import { desk2Action } from "./desk2-api.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 
 const cfg = await loadConfig();
@@ -97,6 +99,7 @@ const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const mux = await createMux(cfg);
 const hsessions = new HerdrSessions(cfg.dataDir);
+const pairs = new Pairs(cfg.dataDir);
 // Your live_sessions plus every named session opened from the desk.
 const liveClaude = new LiveClaude(() => [...cfg.liveSessions, ...hsessions.openNames()]);
 // Persistent sessions come back with the desk (reboot, restart), resuming Claude's last conversation.
@@ -331,6 +334,8 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (m.type === "attach" && sourceKind(String(m.location ?? "")) === "local" && insideRepo(expandHome(String(m.location).trim()))) needFeature(features, "self");
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
+  if (/^(pair|merge)_/.test(String(m.type))) needFeature(features, "code");
+  if (await desk2Action(m, { store, pairs, send })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.

@@ -11,6 +11,10 @@ export interface ThreadRec {
   createdAt: string;
   title?: string; // General questions: first prompt, for the list and `c:` matching
   closed?: string; // ISO time it was closed: folded away in the list; sending to it reopens it
+  worktree?: string; // code threads in a git project: their own git worktree (agents run there)
+  branch?: string; // that worktree's branch, e.g. desk/code-1
+  base?: string; // commit the thread started from (diff base)
+  from?: string; // thread it was started from (design-1 -> code-2): a related link
 }
 
 export interface SourceRec {
