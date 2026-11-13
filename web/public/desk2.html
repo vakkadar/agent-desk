@@ -476,7 +476,7 @@ function renderRight() {
   app.classList.remove("no-right");
   let o = 0, n = 0;
   const diff = `<div class="code">${diffOf(f).map(([k, x]) => {
-    if (k === "@@") { const m = /-(\d+),\d+ \+(\d+)/.exec(x); if (m) { o = +m[1]; n = +m[2]; } return `<div class="hunk">@@ ${esc(x)}</div>`; }
+    if (k === "@@") { const m = /-(\d+)(?:,\d+)? \+(\d+)/.exec(x); if (m) { o = +m[1]; n = +m[2]; } return `<div class="hunk">@@ ${esc(x)}</div>`; }
     const a = k === "+", d = k === "-", ol = a ? "" : o++, nl = d ? "" : n++;
     return `<div class="ln ${a ? "add" : d ? "del" : ""}"><span>${ol}</span><span>${nl}</span><span class="sg">${a ? "+" : d ? "−" : " "}</span><span class="tx">${esc(x)}</span></div>`; }).join("")}</div>`;
   const preview = f.path.includes("phone") ? `<div style="display:grid;place-items:center;padding:18px"><div style="width:300px;border:8px solid var(--fg);border-radius:30px;padding:14px;background:var(--bg);display:flex;flex-direction:column;gap:10px">
@@ -606,7 +606,7 @@ function layout() {
   app.style.setProperty("--lw", S.lw + "px"); app.style.setProperty("--rw", S.rw + "px"); $("left").style.setProperty("--fh", S.fh + "px");
   ["ask", "design", "code"].forEach((k) => app.classList.toggle("p-" + k, S.persp === k));
   document.body.className = "lv-" + S.level + ($("app").classList.contains("thread-open") ? " thread-open" : "");
-  $("needN").textContent = NEEDS.length;
+  $("needN").textContent = NEEDS.length; $("needN").style.display = NEEDS.length ? "" : "none";
   persist();
 }
 function render() { renderPersp(); renderTree(); renderFiles(); renderMid(); renderRight(); layout(); }
@@ -674,5 +674,6 @@ document.addEventListener("pointerdown", (e) => {
   if (q.get("open") && phone()) openThreadScreen(true); }
 render();
 </script>
+<script src="desk2-live.js"></script>
 </body>
 </html>

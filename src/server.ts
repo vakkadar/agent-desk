@@ -343,7 +343,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
   if (m.type === "mail" || m.type === "links") needFeature(features, "design");
-  if (/^(pair|merge)_|^files$|^file_diff$/.test(String(m.type))) needFeature(features, "code");
+  if (/^(pair|merge)_|^files$|^file_diff$|^review$/.test(String(m.type))) needFeature(features, "code");
   if (await desk2Action(m, { store, pairs, send, mergeQueue, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
