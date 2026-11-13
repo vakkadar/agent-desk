@@ -6,6 +6,8 @@ import type { Pairs } from "./pair.js";
 import { changedFiles, fileDiff } from "./worktree.js";
 import { readReview, reviewerBrief, verdictPath } from "./review.js";
 import type { MergeQueue } from "./merge-queue.js";
+import type { DeskEvent } from "./types.js";
+import { links } from "./links.js";
 import { isSelfSource } from "./self-dev.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -16,6 +18,7 @@ export interface Desk2Ctx {
   send: (m: unknown) => void;
   mergeQueue: MergeQueue;
   seesSelf: boolean; // may see the desk's own repo (Desk dev)
+  events: () => Promise<DeskEvent[]>; // the event journal (prompts carry mentions and mail)
 }
 
 const need = <T>(v: T | undefined, what: string): T => {
@@ -110,6 +113,12 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
     }
     case "merge_list": {
       c.send({ type: "merge_queue", items: visibleQueue(c) });
+      return true;
+    }
+    case "links": {
+      // Related threads in a project: started from, mail, mentions.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      c.send({ type: "links", sourceId: rec.id, links: links(rec, await c.events()) });
       return true;
     }
     case "pair_get": {

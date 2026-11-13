@@ -40,6 +40,7 @@ import { Pairs } from "./pair.js";
 import { desk2Action } from "./desk2-api.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
+import { mailText } from "./links.js";
 import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 
@@ -341,8 +342,9 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (m.type === "attach" && sourceKind(String(m.location ?? "")) === "local" && insideRepo(expandHome(String(m.location).trim()))) needFeature(features, "self");
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
+  if (m.type === "mail" || m.type === "links") needFeature(features, "design");
   if (/^(pair|merge)_|^files$|^file_diff$/.test(String(m.type))) needFeature(features, "code");
-  if (await desk2Action(m, { store, pairs, send, mergeQueue, seesSelf: seesSelf(features) })) return;
+  if (await desk2Action(m, { store, pairs, send, mergeQueue, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.
@@ -466,6 +468,15 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
       const th = store.get(String(m.sourceId))?.threads[String(m.threadId)];
       if (th?.worktree) { th.lastSnap = await snapshot(th.worktree).catch(() => th.lastSnap); await store.save(store.get(String(m.sourceId))!); }
       await runPrompt(m, send);
+      return;
+    }
+    case "mail": {
+      // Mailbox: one thread tells another something; it arrives as a turn for that thread's builder.
+      const rec = need(store.get(m.sourceId), "source");
+      const from = need(rec.threads[String(m.from)], "thread").id;
+      const to = need(rec.threads[String(m.to)], "thread").id;
+      if (from === to) throw new Error("mail needs two different threads");
+      await runPrompt({ sourceId: rec.id, threadId: to, text: mailText(from, String(m.text ?? "").slice(0, 20_000)) }, send);
       return;
     }
     case "schedule_run":
