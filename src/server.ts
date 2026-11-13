@@ -38,6 +38,7 @@ import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
 import { Pairs } from "./pair.js";
 import { desk2Action } from "./desk2-api.js";
+import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 
 const cfg = await loadConfig();
@@ -334,7 +335,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (m.type === "attach" && sourceKind(String(m.location ?? "")) === "local" && insideRepo(expandHome(String(m.location).trim()))) needFeature(features, "self");
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
-  if (/^(pair|merge)_/.test(String(m.type))) needFeature(features, "code");
+  if (/^(pair|merge)_|^files$|^file_diff$/.test(String(m.type))) needFeature(features, "code");
   if (await desk2Action(m, { store, pairs, send })) return;
   switch (m.type) {
     case "ls": {
@@ -435,7 +436,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
       const mode = m.mode as Exclude<Mode, "ask">;
       if (mode !== "design" && mode !== "code") throw new Error("mode must be design|code");
       const id = store.nextThreadId(rec, mode);
-      let session;
+      let session, wt: Worktree | undefined;
       if (m.resume !== undefined) {
         // Continue (or fork, if still open elsewhere) an existing Claude session from this dir.
         if (!isSessionId(m.resume) || rec.kind !== "local") throw new Error("bad session");
@@ -443,15 +444,24 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
         if (!known) throw new Error("no such session in this folder");
         const base = { agent: agent.id, sessionId: m.resume, cwd: rec.location, started: true };
         session = m.fork ? await agent.fork(base) : await agent.resume(base);
+      } else if (mode === "code" && rec.kind === "local" && m.worktree !== false && (await isGitRepo(rec.location))) {
+        // Own git worktree on its own branch: parallel threads never collide in one checkout.
+        wt = await ensureWorktree(rec.location, id);
+        session = await agent.start({ cwd: wt.worktree, name: `${rec.id}-${id}` });
       } else session = await agent.fork(rec.threads.ask.session);
-      rec.threads[id] = { id, mode, session, createdAt: new Date().toISOString() };
+      rec.threads[id] = { id, mode, session, createdAt: new Date().toISOString(), ...(wt ?? {}) };
+      if (m.from && rec.threads[String(m.from)]) rec.threads[id].from = String(m.from);
       await store.save(rec);
       send({ type: "sources", sources: sourcesFor(features) });
       return;
     }
-    case "prompt":
+    case "prompt": {
+      // Snapshot a worktree thread before the turn: the "since my last message" diff base.
+      const th = store.get(String(m.sourceId))?.threads[String(m.threadId)];
+      if (th?.worktree) { th.lastSnap = await snapshot(th.worktree).catch(() => th.lastSnap); await store.save(store.get(String(m.sourceId))!); }
       await runPrompt(m, send);
       return;
+    }
     case "schedule_run":
       if (!scheduler.runNow(String(m.name))) throw new Error(`schedule ${m.name} is still running`);
       send({ type: "schedules", rows: scheduler.rows() });

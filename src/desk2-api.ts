@@ -3,6 +3,7 @@
 // server.ts calls desk2Action() before its own switch; it returns false for types it doesn't own.
 import type { SourceRec, ThreadStore } from "./threads.js";
 import type { Pairs } from "./pair.js";
+import { changedFiles, fileDiff } from "./worktree.js";
 
 export interface Desk2Ctx {
   store: ThreadStore;
@@ -21,6 +22,8 @@ export function threadDir(rec: SourceRec, threadId: string): string {
   return th?.worktree ?? th?.session.cwd ?? rec.location;
 }
 
+const diffBase = (th: { base?: string; lastSnap?: string }, which: unknown) => (which === "last" ? th.lastSnap ?? th.base : th.base);
+
 export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
   switch (m.type) {
     case "pair_open": {
@@ -37,6 +40,24 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       const rec = need(c.store.get(String(m.sourceId)), "source");
       await c.pairs.closeTab(rec.id, String(m.threadId));
       c.send({ type: "pair", sourceId: rec.id, pair: c.pairs.get(rec.id) ?? null });
+      return true;
+    }
+    case "files": {
+      // Files the thread touched, output product vs supporting. base: "start" (default) | "last".
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      const base = diffBase(th, m.base);
+      const files = th.worktree && base ? await changedFiles(th.worktree, base) : [];
+      c.send({ type: "files", sourceId: rec.id, threadId: th.id, base: m.base === "last" ? "last" : "start", files });
+      return true;
+    }
+    case "file_diff": {
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      const base = diffBase(th, m.base);
+      if (!th.worktree || !base) throw new Error("this thread has no worktree");
+      const diff = await fileDiff(th.worktree, base, String(m.path));
+      c.send({ type: "file_diff", sourceId: rec.id, threadId: th.id, path: String(m.path), diff });
       return true;
     }
     case "pair_get": {

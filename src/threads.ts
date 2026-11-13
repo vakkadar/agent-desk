@@ -14,6 +14,7 @@ export interface ThreadRec {
   worktree?: string; // code threads in a git project: their own git worktree (agents run there)
   branch?: string; // that worktree's branch, e.g. desk/code-1
   base?: string; // commit the thread started from (diff base)
+  lastSnap?: string; // snapshot taken when you last sent to it ("since my last message" diff base)
   from?: string; // thread it was started from (design-1 -> code-2): a related link
 }
 
