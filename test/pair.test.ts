@@ -32,6 +32,7 @@ function fakeHerdr() {
     if (k === "pane list") return { panes: [...panes].map((p) => ({ pane_id: p })) };
     if (k === "pane split") return { pane: { pane_id: pane() } };
     if (k === "pane run") { runs.push([a[2], a[3]]); return null; }
+    if (k === "pane send-text" || k === "pane send-keys") { runs.push([a[2], `${a[1]}:${a[3]}`]); return null; }
     throw new Error("unexpected " + a.join(" "));
   };
   return { h, runs, panes, tabs };
@@ -84,4 +85,13 @@ test("reviewer pane died: re-split, builder not relaunched", async () => {
   assert.equal(r.tabs["code-1"].reviewer, "w1:p5");
   assert.deepEqual(f.runs.at(-1), ["w1:p5", "claude --model opus"]);
   assert.equal(f.runs.filter(([p]) => p === "w1:p3").length, 1);
+});
+
+test("sendTo types into the chosen pane, then Enter; unknown tab refused", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, () => false);
+  await p.open("s", "/x", "code-1");
+  await p.sendTo("s", "code-1", "reviewer", "review please");
+  assert.deepEqual(f.runs.slice(-2), [[p.get("s")!.tabs["code-1"].reviewer, "send-text:review please"], [p.get("s")!.tabs["code-1"].reviewer, "send-keys:enter"]]);
+  await assert.rejects(p.sendTo("s", "code-9", "builder", "x"), /no code-9 pair/);
 });

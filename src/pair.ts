@@ -128,6 +128,15 @@ export class Pairs {
     return rec;
   }
 
+  /** Type a message into the builder or reviewer pane and press Enter (the pair's own TUI handles it). */
+  async sendTo(sourceId: string, tab: string, role: "builder" | "reviewer", text: string): Promise<void> {
+    const rec = this.get(sourceId);
+    const t = rec?.tabs[tab];
+    if (!rec || !t) throw new Error(`no ${tab} pair open for ${sourceId}`);
+    await this.herdr(rec.session, ["pane", "send-text", t[role], text]);
+    await this.herdr(rec.session, ["pane", "send-keys", t[role], "enter"]);
+  }
+
   /** Close one thread's tab (its two agents stop). The project session stays. */
   async closeTab(sourceId: string, tab: string): Promise<void> {
     const rec = this.get(sourceId);

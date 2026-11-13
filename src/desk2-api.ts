@@ -4,6 +4,7 @@
 import type { SourceRec, ThreadStore } from "./threads.js";
 import type { Pairs } from "./pair.js";
 import { changedFiles, fileDiff } from "./worktree.js";
+import { readReview, reviewerBrief, verdictPath } from "./review.js";
 
 export interface Desk2Ctx {
   store: ThreadStore;
@@ -58,6 +59,22 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       if (!th.worktree || !base) throw new Error("this thread has no worktree");
       const diff = await fileDiff(th.worktree, base, String(m.path));
       c.send({ type: "file_diff", sourceId: rec.id, threadId: th.id, path: String(m.path), diff });
+      return true;
+    }
+    case "review": {
+      // The one review line for the builder's turn, from the reviewer's verdict file.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      c.send({ type: "review", sourceId: rec.id, threadId: th.id, review: await readReview(rec.location, th.id, th.worktree) });
+      return true;
+    }
+    case "pair_review": {
+      // Ask the thread's reviewer pane to (re)review: sends the brief with the verdict file path.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      const path = verdictPath(rec.location, th.id, th.worktree);
+      await c.pairs.sendTo(rec.id, th.id, "reviewer", reviewerBrief(th.id, path, th.lastSnap ?? th.base ?? "HEAD"));
+      c.send({ type: "pair_review", sourceId: rec.id, threadId: th.id, path });
       return true;
     }
     case "pair_get": {
