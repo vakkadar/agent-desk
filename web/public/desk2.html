@@ -70,6 +70,12 @@ code { font: 12.5px var(--mono); background: var(--sunk); padding: 1px 5px; bord
 .kbd { font: 11px var(--mono); border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; color: var(--mute); }
 .pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; white-space: nowrap; }
 .p-ok { background: var(--ok-soft); color: var(--ok); } .p-amber { background: var(--amber-soft); color: var(--amber); } .p-mute { background: var(--sunk); color: var(--mute); }
+.p-red { background: var(--del-bg); color: var(--del-fg); }
+.deskp { flex: none; margin: 10px 16px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); display: flex; flex-direction: column; gap: 8px; }
+.deskp .dh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.deskp .aprow { display: flex; align-items: center; gap: 8px; min-height: 30px; flex-wrap: wrap; }
+.deskp .aprow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deskp a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 body.lv-everyday .dev, body.lv-everyday .pow, body.lv-developer .pow { display: none !important; }
 
 /* ---------- top bar ---------- */
@@ -295,7 +301,16 @@ const THREADS = {
     { id: "design-2", title: "Phone inbox", state: "working", age: "now", kind: "design", ctx: 22, tok: "19k" },
   ],
   sanatana: [{ id: "code-1", title: "Hub /api/ask streaming", state: "idle", age: "3d", kind: "code", ctx: 22, tok: "77k" }],
-  "desk-dev": [{ id: "dev-1", title: "Restart gate after tests", state: "working", age: "now", kind: "code", ctx: 18, tok: "28k" }],
+  "desk-dev": [{ id: "code-1", title: "Restart gate after tests", state: "working", age: "now", kind: "code", desk: true, ctx: 18, tok: "28k" }, { id: "code-2", title: "Desk perspective in desk2", state: "done", age: "1h", kind: "code", desk: true, ctx: 31, tok: "54k" }],
+};
+// Desk perspective: what the running desk is built from, and running previews (live: from the server).
+const DESK = {
+  applies: [
+    { id: 3, kind: "merge", threadId: "code-2", commit: "9f1c2ab", prev: "4d0e771", subject: "Merge code-2 (desk/code-2) from the desk", state: "live", at: "1h" },
+    { id: 2, kind: "merge", threadId: "code-0", commit: "4d0e771", prev: "b21a90c", subject: "Merge code-0 (desk/code-0) from the desk", state: "rolled back", reason: "new build did not pass its health check; reverted in 4d0e771", at: "3h" },
+    { id: 1, kind: "merge", threadId: "code-9", commit: "b21a90c", prev: "a011962", subject: "Merge code-9 (desk/code-9) from the desk", state: "live", at: "1d" },
+  ],
+  previews: [{ threadId: "code-1", port: 7520, url: "http://127.0.0.1:7520/desk2.html", state: "up" }],
 };
 const NEEDS = [
   { place: "agent-desk", thread: "code-3", text: "Builder wants to run rm -rf ~/.cache/herdr-core/t-old" },
@@ -334,8 +349,9 @@ const LEVELS = { everyday: "Everyday", developer: "Developer", power: "Power dev
 // ================= state =================
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem("d2." + k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem("d2." + k, JSON.stringify(v)); } catch {} };
-const PERSP = { ask: { label: "Ask", key: "1" }, design: { label: "Design", key: "2" }, code: { label: "Code", key: "3" } };
-const kindOf = (t) => (!t.kind || t.kind === "ask" ? "ask" : t.kind);
+const PERSP = { ask: { label: "Ask", key: "1" }, design: { label: "Design", key: "2" }, code: { label: "Code", key: "3" }, desk: { label: "Desk", key: "4", self: true } };
+// Desk = code threads on the desk's own repo: same worktree/review/merge, plus build, apply, roll back.
+const kindOf = (t) => (t.desk ? "desk" : !t.kind || t.kind === "ask" ? "ask" : t.kind);
 const S = Object.assign({ persp: "code", layouts: {}, level: "power", deskDev: true, place: "agent-desk", thread: "code-3", left: true, file: null, fileMode: "diff", diffBase: "branch", filesMin: false, closed: {}, target: "This desk", builderModel: "Sonnet 5.5", reviewModel: "Opus 5.5", lw: 272, rw: 540, fh: 260 }, load("s", {}));
 S.dispute = null; S.view = "thread";
 const $ = (id) => document.getElementById(id);
@@ -382,7 +398,8 @@ function renderFiles() {
 function composer(t) {
   const p = place(), general = p.kind === "general";
   const pfx = t ? `browser[${t.id}]:` : "browser:";
-  const modeChip = !t && !general && dv() ? `<span class="chip">New <b>${S.persp}</b> thread<input type="hidden" data-sel="newKind" value="${S.persp}"></span>` : "";
+  const nk = S.persp === "desk" ? "code" : S.persp;
+  const modeChip = !t && !general && dv() ? `<span class="chip">New <b>${S.persp}</b> thread<input type="hidden" data-sel="newKind" value="${nk}"></span>` : "";
   const targetChip = general ? `<span class="chip">Run on <select data-sel="target">${TARGETS.map((x) => `<option ${x === S.target ? "selected" : ""}>${x}</option>`).join("")}</select></span>` : "";
   const running = t && t.state === "working", hiCtx = t && t.ctx >= 70;
   return `<div class="box"><div class="cbox">
@@ -438,6 +455,21 @@ function out(t) {
       </div></div>
     <div class="turn me"><div class="who">you <span class="mono dev">browser[code-3]</span></div><div class="body">Add an hc mux adapter behind MuxAdapter. Keep herdr 0.9.1 as fallback. Label terminals so they show in herdr-app.</div></div></div>`;
 }
+// Desk perspective: the running desk, this thread's preview, apply history with revert.
+const APPLY_PILL = { live: "p-ok", built: "p-amber", restarting: "p-amber", building: "p-amber", "rolled back": "p-red", failed: "p-red" };
+function deskPanel(t) {
+  const now = DESK.applies.find((a) => a.state === "live" || a.state === "built");
+  const busy = DESK.applies.find((a) => a.state === "building" || a.state === "restarting");
+  const pv = t && DESK.previews.find((x) => x.threadId === t.id);
+  const row = (a) => `<div class="aprow"><span class="pill ${APPLY_PILL[a.state] ?? "p-mute"}">${esc(a.state)}</span><span class="mono">#${a.id} ${esc(a.commit)}</span>
+    <span class="t">${a.kind === "revert" ? `revert of #${a.reverts}` : esc(a.threadId ?? "")} <span class="mute">${esc(a.reason ?? "")}</span></span>
+    ${(a.state === "live" || a.state === "built") && !a.revertedBy ? `<button class="btn sm" data-desk-revert="${a.id}" title="Revert this change (new commit), rebuild, restart; rolled back if unhealthy">Revert</button>` : a.revertedBy ? `<span class="mute">reverted by #${a.revertedBy}</span>` : ""}</div>`;
+  return `<div class="deskp"><div class="dh"><b>Running desk</b><span class="mono">${now ? esc(now.commit) : "—"}</span>${busy ? `<span class="pill p-amber">${esc(busy.state)} #${busy.id}</span>` : ""}<span class="sp"></span>
+    ${t ? (pv ? `<span class="pill ${pv.state === "up" ? "p-ok" : pv.state === "failed" ? "p-red" : "p-amber"}" title="${esc(pv.reason ?? "")}">preview ${esc(pv.state)}</span>${pv.state === "up" ? `<a class="btn sm" href="${esc(pv.url)}" target="_blank" rel="noopener">Open preview ↗</a>` : ""}<button class="btn sm" data-act="previewStop">Stop preview</button>`
+      : `<button class="btn sm" data-act="preview" title="Build ${t.id}'s worktree and run it as a second desk on a spare port">Preview ${t.id}</button>`) : ""}</div>
+    <div class="mute" style="font-size:12px">Merge runs <code>npm run build &amp;&amp; npm test</code> first (always). Then: build, restart, health check; unhealthy → old build back and the merge reverted. Nothing is pushed.</div>
+    ${DESK.applies.length ? `<details class="fold" ${busy ? "open" : ""}><summary>History · ${DESK.applies.length} applied</summary><div class="fb">${DESK.applies.slice(0, 8).map(row).join("")}</div></details>` : ""}</div>`;
+}
 function renderNotes() {
   return `<div class="tline"><b>Notes</b><span class="meta">· today, all places</span><span class="sp"></span><button class="ib" data-act="closeView" title="Back to thread">×</button></div>
     ${`<div class="box"><div class="cbox"><textarea placeholder="Add a note (turns are recorded automatically)" style="min-height:72px"></textarea><div class="crow"><span class="sp"></span><button class="btn pri send" data-act="note">Add note</button></div></div></div>`}
@@ -451,7 +483,7 @@ function renderUsage() {
 }
 function renderMid() {
   const t = thr();
-  $("mid").innerHTML = S.view === "notes" ? renderNotes() : S.view === "usage" ? renderUsage() : tline(t) + composer(t) + out(t);
+  $("mid").innerHTML = S.view === "notes" ? renderNotes() : S.view === "usage" ? renderUsage() : tline(t) + (S.persp === "desk" ? deskPanel(t) : "") + composer(t) + out(t);
   const ta = $("msg");
   if (ta) {
     ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
@@ -499,7 +531,7 @@ function palData(q) {
   const out = [], ql = q.toLowerCase().trim();
   if (ql.startsWith("?")) return [{ k: "web", label: `Search the web for “${q.slice(1).trim()}”`, s: "new tab", run: () => toast("Opens Google in a new tab") }];
   const cmd = ql.startsWith(">"), qq = cmd ? ql.slice(1).trim() : ql;
-  const cmds = [["Ask perspective", "Alt+1", () => switchPersp("ask")], ["Design perspective", "Alt+2", () => switchPersp("design")], ["Code perspective", "Alt+3", () => switchPersp("code")],
+  const cmds = [["Ask perspective", "Alt+1", () => switchPersp("ask")], ["Design perspective", "Alt+2", () => switchPersp("design")], ["Code perspective", "Alt+3", () => switchPersp("code")], ...(S.deskDev ? [["Desk perspective", "Alt+4", () => switchPersp("desk")]] : []),
     ["New code thread", "", () => { switchPersp("code"); newThread("code"); }], ["New design thread", "", () => { switchPersp("design"); newThread("design"); }], ["New question (General)", "", () => go("general", null)],
     ["Notes: today", "", () => view("notes")], ["Usage", "", () => view("usage")], ["Schedules", "", () => toast("Schedules list: next run, last run, run now")],
     ["Attach a project folder or URL", "", () => toast("Folder browser / URL")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
@@ -546,7 +578,8 @@ const closeMenu = () => $("menu").classList.remove("on");
 // ================= perspectives (like Eclipse): same desk, arranged for one kind of work =================
 function renderPersp() {
   const count = (k) => Object.values(THREADS).flat().filter((t) => kindOf(t) === k && t.state !== "idle" && t.state !== "done").length;
-  $("persp").innerHTML = Object.entries(PERSP).map(([k, v]) => `<button role="tab" class="${S.persp === k ? "on" : ""}" data-persp="${k}" title="${v.label} perspective (Alt+${v.key})">${v.label}${count(k) ? `<span class="n">${count(k)}</span>` : ""}</button>`).join("");
+  if (S.persp === "desk" && !S.deskDev) S.persp = "code";
+  $("persp").innerHTML = Object.entries(PERSP).filter(([, v]) => !v.self || S.deskDev).map(([k, v]) => `<button role="tab" class="${S.persp === k ? "on" : ""}" data-persp="${k}" title="${v.label} perspective (Alt+${v.key})">${v.label}${count(k) ? `<span class="n">${count(k)}</span>` : ""}</button>`).join("");
 }
 function switchPersp(k, keepTarget) {
   if (k === S.persp) return;
@@ -557,7 +590,7 @@ function switchPersp(k, keepTarget) {
   else if (!keepTarget) {
     S.rw = k === "design" ? Math.round(innerWidth * 0.5) : 540;
     const first = visiblePlaces().flatMap((p) => (THREADS[p.id] || []).filter((t) => kindOf(t) === k).map((t) => [p.id, t.id]))[0];
-    [S.place, S.thread] = first ?? [k === "ask" ? "general" : "agent-desk", null]; S.file = null;
+    [S.place, S.thread] = first ?? [k === "ask" ? "general" : k === "desk" ? "desk-dev" : "agent-desk", null]; S.file = null;
   }
   S.view = "thread"; S.dispute = null;
   if (k === "design" && !S.file) autoPreview();
@@ -579,13 +612,13 @@ function send() {
   const ta = $("msg"); const v = ta?.value.trim(); if (!v) return toast("Type a message");
   const t = thr();
   if (!t) { const list = THREADS[S.place] ||= []; const kind = document.querySelector('[data-sel="newKind"]')?.value ?? (S.place === "general" ? null : "ask");
-    const id = S.place === "general" ? `q-${15 + list.length}` : `${kind}-${7 + list.length}`; list.unshift({ id, title: v.slice(0, 60), state: "working", age: "now", kind: kind === "ask" ? "ask" : kind, ctx: 2, tok: "1k" }); go(S.place, id); return toast(`Started ${id}`); }
+    const id = S.place === "general" ? `q-${15 + list.length}` : `${kind}-${7 + list.length}`; list.unshift({ id, title: v.slice(0, 60), state: "working", age: "now", kind: kind === "ask" ? "ask" : kind, desk: place().deskdev && kind === "code", ctx: 2, tok: "1k" }); go(S.place, id); return toast(`Started ${id}`); }
   const o = document.querySelector(".out"); o.insertAdjacentHTML("afterbegin", `<div class="turn me"><div class="who">you <span class="mono dev">browser[${t.id}]</span></div><div class="body">${esc(v)}</div></div>`); ta.value = ""; o.scrollTop = 0;
 }
 function act(a, el) {
   const T = { attach: "Pick a file or image (or paste, or Share to Desk on phone)", stop: "Stopped", compact: "/compact sent", allow: "Allowed once", allowAlways: "Allowed for this thread", deny: "Denied", answer: "Answer sent to builder",
     terminal: "herdr-app opens space “" + place().name + "”, tab " + (thr()?.id ?? "") + ": builder | reviewer", reviewNow: "Reviewer checking the current diff", schedules: "Schedules list", close: "Thread folded away", merge: "Queued: merge into main after checks",
-    pair: "Pick agent first, then its models", move: "Move: save → kill → move → copy sessions → start", psettings: "Project settings", restart: "Restart needs tests passing + your OK", rollback: "Reverts last commit on main", settings: "Settings folder (GitHub-backed)", openEditor: "Opens in your editor", note: "Note added" };
+    pair: "Pick agent first, then its models", move: "Move: save → kill → move → copy sessions → start", psettings: "Project settings", restart: "Restart needs tests passing + your OK", rollback: "Reverts last commit on main", preview: "Building the worktree, then a second desk on a spare port", deskRevert: "Revert commit made; rebuilding and restarting", previewStop: "Preview stopped", settings: "Settings folder (GitHub-backed)", openEditor: "Opens in your editor", note: "Note added" };
   switch (a) {
     case "send": return send();
     case "toggleLeft": S.left = !S.left; return layout();
@@ -605,7 +638,7 @@ function layout() {
   const app = $("app");
   app.classList.toggle("no-left", !S.left && !phone());
   app.style.setProperty("--lw", S.lw + "px"); app.style.setProperty("--rw", S.rw + "px"); $("left").style.setProperty("--fh", S.fh + "px");
-  ["ask", "design", "code"].forEach((k) => app.classList.toggle("p-" + k, S.persp === k));
+  ["ask", "design", "code", "desk"].forEach((k) => app.classList.toggle("p-" + k, S.persp === k));
   document.body.className = "lv-" + S.level + ($("app").classList.contains("thread-open") ? " thread-open" : "");
   $("needN").textContent = NEEDS.length; $("needN").style.display = NEEDS.length ? "" : "none";
   persist();
@@ -634,6 +667,7 @@ document.addEventListener("click", (e) => {
   if (d.fmode) { S.fileMode = d.fmode; return renderRight(); }
   if (d.base) { S.diffBase = d.base; toast(d.base === "branch" ? "Diff since the thread's branch left main" : "Diff since your last message"); return renderRight(); }
   if (d.dispute) { S.dispute = d.dispute; return renderMid(); }
+  if (d.deskRevert) { if (!d.armed) { d.armed = "1"; el.textContent = "Confirm revert"; el.classList.add("pri"); return; } return act("deskRevert", el); } // two clicks: it restarts the desk
   if (d.level) { S.level = d.level; if (d.level === "everyday" && S.persp !== "ask") switchPersp("ask"); if (!dv() && S.place !== "general") { S.place = "general"; S.thread = "q-14"; } closeMenu(); return render(); }
   if (d.cmd) { closeMenu(); if (d.cmd === "/<command>") { const ta = $("msg"); ta.value = "/" + ta.value; return ta.focus(); } return toast(`${d.cmd} sent as typed`); }
   if (d.pfx) { closeMenu(); const ta = $("msg"); if (!ta.value.startsWith(d.pfx)) ta.value = d.pfx + ta.value; return ta.focus(); }
@@ -651,7 +685,7 @@ $("palIn").addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   const c = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (c && k === "k") { e.preventDefault(); pal(!$("pal").classList.contains("on")); }
-  else if (e.altKey && ["1", "2", "3"].includes(e.key) && dv()) { e.preventDefault(); switchPersp({ 1: "ask", 2: "design", 3: "code" }[e.key]); }
+  else if (e.altKey && ["1", "2", "3", "4"].includes(e.key) && dv() && (e.key !== "4" || S.deskDev)) { e.preventDefault(); switchPersp({ 1: "ask", 2: "design", 3: "code", 4: "desk" }[e.key]); }
   else if (c && k === "b") { e.preventDefault(); act("toggleLeft"); }
   else if (e.key === "Escape") { pal(false); closeMenu(); if (S.file) { S.file = null; renderFiles(); renderRight(); } }
   else if (e.key === "/" && !e.target.closest("textarea, input")) { e.preventDefault(); $("msg")?.focus(); }

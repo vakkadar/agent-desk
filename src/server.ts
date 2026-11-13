@@ -37,12 +37,14 @@ import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
 import { Pairs } from "./pair.js";
-import { desk2Action } from "./desk2-api.js";
+import { deskState, desk2Action } from "./desk2-api.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
 import { mailText } from "./links.js";
 import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
+import { DeskApplies, linkDeps, systemdRestart } from "./desk-apply.js";
+import { DeskPreviews } from "./desk-preview.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -256,7 +258,14 @@ new LiveFollower(
     (sourceId, event) => bus.publish({ sourceId, threadId: "ask", event }),
     (id) => helloed.size > 0 && !busy.has(`${id}/ask`),
   ).start();
+// Desk perspective: merged Desk threads are built, restarted into and kept only if healthy.
+const healthHost = cfg.network.bind.find((h) => h === "127.0.0.1" || h === "0.0.0.0" || h === "::") ? "127.0.0.1" : cfg.network.bind[0];
+const broadcastDesk = () => { for (const [s, f] of helloed) if (seesSelf(f)) s(deskState({ applies, previews })); };
+const applies = new DeskApplies(cfg.dataDir, DESK_REPO, { restart: systemdRestart(`http://${healthHost}:${cfg.port}/healthz`), onChange: () => broadcastDesk() });
+applies.resume();
+const previews = new DeskPreviews(cfg.dataDir, DESK_REPO, cfg.port + 100, () => broadcastDesk());
 const mergeQueue = new MergeQueue(cfg.dataDir, {
+  onMerged: (it) => { if (isSelfSource(store.get(it.sourceId)) && it.commit) applies.apply({ commit: it.commit, threadId: it.threadId }).catch((e) => console.error("desk apply:", e)); },
   review: async (it) => { const rec = store.get(it.sourceId); return readReview(rec?.location ?? it.repo, it.threadId, it.worktree); },
   onChange: (items) => { for (const [s, f] of helloed) if (f.has("code")) s({ type: "merge_queue", items: items.filter((i) => seesSelf(f) || !isSelfSource(store.get(i.sourceId))) }); },
 });
@@ -344,7 +353,8 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
   if (m.type === "mail" || m.type === "links") needFeature(features, "design");
   if (/^(pair|merge)_|^files$|^file_diff$|^review$/.test(String(m.type))) needFeature(features, "code");
-  if (await desk2Action(m, { store, pairs, send, mergeQueue, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
+  if (String(m.type).startsWith("desk_")) needFeature(features, "self");
+  if (await desk2Action(m, { store, pairs, send, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.
@@ -455,6 +465,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
       } else if (mode === "code" && rec.kind === "local" && m.worktree !== false && (await isGitRepo(rec.location))) {
         // Own git worktree on its own branch: parallel threads never collide in one checkout.
         wt = await ensureWorktree(rec.location, id);
+        if (isSelfSource(rec)) linkDeps(DESK_REPO, wt.worktree); // Desk thread: build and tests need the desk's node_modules
         session = await agent.start({ cwd: wt.worktree, name: `${rec.id}-${id}` });
       } else session = await agent.fork(rec.threads.ask.session);
       rec.threads[id] = { id, mode, session, createdAt: new Date().toISOString(), ...(wt ?? {}) };
@@ -623,8 +634,9 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
     const used = sid ? await contextUsed(live?.cwd ?? th.session.cwd, sid).catch(() => undefined) : undefined;
     if (used) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "context", used, limit: cfg.contextLimit } });
   } finally {
-    if (isSelfSource(rec)) {
-      // The desk's own code: commit what the turn changed (push stays manual).
+    if (isSelfSource(rec) && !th.worktree) {
+      // The desk's own code, worked on in the live checkout: commit what the turn changed (push stays manual).
+      // Desk threads with a worktree commit at merge time instead, through the merge queue.
       const said = (t: string) => bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: `\n\n_${t}_` } });
       await commitTurn(rec.location, text, th.id)
         .then((h) => h && said(`committed ${h} in ${rec.location} (not pushed)`))

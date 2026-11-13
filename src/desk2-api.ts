@@ -9,6 +9,8 @@ import type { MergeQueue } from "./merge-queue.js";
 import type { DeskEvent } from "./types.js";
 import { links } from "./links.js";
 import { isSelfSource } from "./self-dev.js";
+import { DESK_CHECK, linkDeps, type DeskApplies } from "./desk-apply.js";
+import type { DeskPreviews } from "./desk-preview.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -19,7 +21,12 @@ export interface Desk2Ctx {
   mergeQueue: MergeQueue;
   seesSelf: boolean; // may see the desk's own repo (Desk dev)
   events: () => Promise<DeskEvent[]>; // the event journal (prompts carry mentions and mail)
+  applies?: DeskApplies; // Desk perspective (admin only; server gates desk_* types on "self")
+  previews?: DeskPreviews;
 }
+
+/** What the Desk perspective shows: apply history (newest first) and running previews. */
+export const deskState = (c: Pick<Desk2Ctx, "applies" | "previews">) => ({ type: "desk", applies: c.applies?.list() ?? [], previews: c.previews?.list() ?? [] });
 
 const need = <T>(v: T | undefined, what: string): T => {
   if (v === undefined) throw new Error(`no such ${what}`);
@@ -101,7 +108,10 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       const rec = need(c.store.get(String(m.sourceId)), "source");
       const th = need(rec.threads[String(m.threadId)], "thread");
       if (!th.worktree || !th.branch) throw new Error(`${th.id} has no worktree to merge`);
-      const check = await mergeCheck(rec.location);
+      // The desk's own repo: build + tests always run before the merge, whatever the project files say.
+      const self = isSelfSource(rec);
+      if (self) linkDeps(rec.location, th.worktree);
+      const check = self ? DESK_CHECK : await mergeCheck(rec.location);
       c.mergeQueue.enqueue({ sourceId: rec.id, threadId: th.id, repo: rec.location, worktree: th.worktree, branch: th.branch, force: m.force === true, check });
       c.send({ type: "merge_queue", items: visibleQueue(c) });
       return true;
@@ -109,6 +119,29 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
     case "merge_cancel": {
       c.mergeQueue.cancel(String(m.sourceId), String(m.threadId));
       c.send({ type: "merge_queue", items: visibleQueue(c) });
+      return true;
+    }
+    case "desk_state": {
+      c.send(deskState(c));
+      return true;
+    }
+    case "desk_revert": {
+      if (!c.applies) throw new Error("the Desk perspective is off");
+      await c.applies.revert(Number(m.id));
+      c.send(deskState(c));
+      return true;
+    }
+    case "desk_preview": {
+      if (!c.previews) throw new Error("the Desk perspective is off");
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      if (!isSelfSource(rec)) throw new Error("preview is for Desk threads (the desk's own repo)");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      if (m.stop === true) c.previews.stop(th.id);
+      else {
+        if (!th.worktree) throw new Error(`${th.id} has no worktree to preview`);
+        void c.previews.start(th.id, th.worktree);
+      }
+      c.send(deskState(c));
       return true;
     }
     case "merge_list": {

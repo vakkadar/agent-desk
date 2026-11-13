@@ -62,6 +62,7 @@
           title: t.title || (t.id === "ask" ? (s.id === "general" ? "New question" : "Project questions") : strip(first?.event.text).slice(0, 70) || "no messages yet"),
           state: threadState(s.id, t.id), age: ago(ev.at(-1)?.ts ?? t.createdAt),
           kind: s.id === "general" ? undefined : t.mode === "ask" ? "ask" : t.mode,
+          desk: s.id === "desk-dev" && t.mode === "code", // Desk perspective
           ctx: ctx ? Math.round((100 * ctx.event.used) / ctx.event.limit) : undefined, tok: tokens ? `${Math.round(tokens / 1000)}k` : "0",
           rec: t,
         };
@@ -88,6 +89,8 @@
       rebuild(); render();
       for (const p of PLACES) if (p.kind === "project" && L.features.includes("design")) wsSend({ type: "links", sourceId: p.id });
       if (L.features.includes("code")) wsSend({ type: "merge_list" });
+      S.deskDev = L.features.includes("self"); // the server decides who sees the desk's own code
+      if (S.deskDev) wsSend({ type: "desk_state" }); else { DESK.applies = []; DESK.previews = []; }
       refreshThread();
     } else if (m.type === "sources") {
       const before = new Set(L.sources.flatMap((s) => Object.keys(s.threads).map((t) => `${s.id}/${t}`)));
@@ -121,6 +124,9 @@
       if (m.attach) toast(`Pair open in herdr: ${m.attach.join(" ")}`);
     } else if (m.type === "pair_review") {
       toast("Reviewer asked to check the current diff");
+    } else if (m.type === "desk") {
+      DESK.applies = m.applies; DESK.previews = m.previews;
+      if (S.persp === "desk") renderMid();
     } else if (m.type === "merge_queue") {
       L.merge = m.items; renderMid();
     } else if (m.type === "error") {
@@ -208,6 +214,9 @@
       case "terminal": return wsSend({ type: "pair_open", ...ids });
       case "reviewNow": return wsSend({ type: "pair_review", ...ids });
       case "merge": return wsSend({ type: "merge_enqueue", ...ids });
+      case "preview": return wsSend({ type: "desk_preview", ...ids });
+      case "previewStop": return wsSend({ type: "desk_preview", ...ids, stop: true });
+      case "deskRevert": return wsSend({ type: "desk_revert", id: Number(el?.dataset.deskRevert) });
       case "close": closeMenu(); return wsSend({ type: "close", ...ids });
       case "compact": closeMenu(); return wsSend({ type: "prompt", ...ids, text: "/compact" });
       case "needs": { const n = NEEDS[0]; return n ? go(n.place, n.thread) : toast("Nothing needs you"); }

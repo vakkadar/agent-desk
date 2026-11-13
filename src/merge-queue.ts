@@ -33,6 +33,8 @@ export interface MergeDeps {
   review: (it: MergeItem) => Promise<ReviewLine>;
   run?: (cmd: string[], cwd: string) => Promise<{ code: number; out: string }>;
   onChange?: (items: MergeItem[]) => void;
+  /** After a real merge (a merge commit landed), e.g. the Desk perspective applies it. */
+  onMerged?: (it: MergeItem) => void;
 }
 
 const GIT_ID = ["-c", "user.name=agent-desk", "-c", "user.email=agent-desk@localhost"];
@@ -134,6 +136,7 @@ export class MergeQueue {
         return this.finish(it, "conflict", files.length ? `conflict in ${files.join(", ")}` : String(e.message).slice(0, 300));
       }
       this.finish(it, "merged", undefined, (await git(it.repo, ["rev-parse", "--short", "HEAD"])).trim());
+      this.deps.onMerged?.({ ...it });
     } catch (e: any) {
       this.finish(it, "failed", String(e?.message ?? e).slice(0, 300));
     }
