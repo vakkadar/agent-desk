@@ -137,7 +137,8 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .etab .x { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; opacity: .5; }
 .etab .x:hover { background: var(--sunk); opacity: 1; }
 .etabs .tools { margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 0 6px; }
-.th { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; flex: none; }
+.th { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; height: 34px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; font-size: 13px; white-space: nowrap; overflow: hidden; }
+.th .ttl { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .th h2 { margin: 0; font-size: 15px; }
 .loop { display: flex; align-items: center; padding: 7px 16px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; overflow-x: auto; flex: none; }
 .loop .st { display: flex; align-items: center; gap: 6px; color: var(--mute); white-space: nowrap; }
@@ -175,7 +176,20 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .pfx { font-family: var(--mono); font-size: 12px; background: var(--acc-soft); color: var(--acc); padding: 1px 8px; border-radius: 6px; font-weight: 600; }
 .split { display: inline-flex; position: relative; }
 .split .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.split .btn:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(255,255,255,.3); padding: 2px 8px; }
+.split { gap: 6px; }
+/* the text box and its buttons are the workhorse: big, always visible */
+.composer { padding: 12px 16px 14px; }
+.cbox { border-width: 1.5px; border-radius: 12px; padding: 10px 12px; gap: 10px; box-shadow: var(--shadow); }
+.cbox textarea { font-size: 15px; }
+.crow .btn { min-height: 36px; }
+.btn.send { min-width: 96px; font-size: 14px; }
+.cmdmenu { width: 360px; max-height: 60vh; overflow: auto; }
+.cmdmenu .gh { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); padding: 8px 10px 2px; display: flex; gap: 6px; }
+.cmdmenu .it { flex-direction: column; align-items: flex-start; gap: 0; padding: 6px 10px; }
+.cmdmenu .it b { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+.cmdmenu .it span { font-size: 12px; color: var(--mute); }
+.cmdmenu .it[disabled] { opacity: .45; cursor: default; }
+.cmdmenu .it.on b::after { content: "  ✓"; color: var(--acc); }
 .split .menu { left: auto; right: 0; top: calc(100% + 6px); min-width: 230px; }
 
 /* bottom panel */
@@ -312,25 +326,21 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
   <div class="sash s1" data-sash="side"></div>
   <div class="center" id="center">
     <div class="editor">
-      <div class="etabs" id="etabs"></div>
       <div class="th" id="th"></div>
-      <div class="loop dev" id="loop"></div>
       <div class="composer">
         <div class="cbox">
           <textarea id="msg" rows="5" placeholder="Message (Ctrl+Enter to send)"></textarea>
           <div class="crow">
-            <span class="pfx dev" id="pfx"></span><button class="model" style="font-size:12px" id="cHint" data-pop="pair" type="button"></button>
+            <span class="pfx dev" id="pfx"></span>
+            <button class="model" style="font-size:12px" id="cHint" data-pop="pair" type="button"></button>
             <div class="spacer"></div>
-            <button class="btn sm dev" id="reviewNow" type="button">Review now</button>
+            <button class="btn" data-dcmd="stop" type="button" title="Stop the running turn">Stop</button>
+            <button class="btn dev" data-cmd="/compact" type="button" title="Summarize the session to free context">/compact</button>
+            <button class="btn dev" id="reviewNow" type="button">Review now</button>
             <div class="split">
-              <button class="btn pri sm" id="sendBtn" type="button">Send</button>
-              <button class="btn pri sm pow" id="sendMore" type="button" aria-label="More send targets">▾</button>
-              <div class="menu" id="sendMenu">
-                <button class="it" data-tg="builder">Builder <small class="mute">default</small></button>
-                <button class="it" data-tg="adversary">Adversary only</button>
-                <button class="it" data-tg="both">Both leads</button>
-                <button class="it" data-tg="mail">Mail another thread…</button>
-              </div>
+              <button class="btn" id="sendMore" type="button" title="More commands" aria-label="More commands">⋯</button>
+              <div class="menu cmdmenu" id="sendMenu"></div>
+              <button class="btn pri send" id="sendBtn" type="button">Send</button>
             </div>
           </div>
         </div>
@@ -407,7 +417,7 @@ const D = {
 const stateWord = { working: "working", blocked: "needs you", review: "in review", done: "done", idle: "idle", queued: "queued", waiting: "waiting on claim" };
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem("proto3." + k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem("proto3." + k, JSON.stringify(v)); } catch {} };
-const S = Object.assign({ profile: "power", project: "agent-desk", thread: "code-3", view: "threads", side: true, right: false, bottom: false, maxBottom: false, btab: "terminals", target: "builder", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
+const S = Object.assign({ profile: "power", project: "agent-desk", thread: "code-3", view: "threads", side: true, right: false, bottom: false, maxBottom: false, btab: "terminals", swapped: false, deskDev: true, sess: { "agent-desk": "attached", "sanatana": "none", "desk-dev": "attached" }, pair: { b: { agent: "claude", model: "Sonnet 5.5" }, a: { agent: "claude", model: "Opus 5.5" } }, file: null, filesMin: false, sizes: { side: 280, right: 300, bottom: 230, files: 280 } }, load("state", {}));
 S.findings = {};
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -592,15 +602,12 @@ function leads() {
 }
 function renderEditor() {
   const t = thr(), [B, A] = leads();
-  // One thread in the working area at a time: picking another replaces it (no editor tabs).
-  $("etabs").innerHTML = `<span class="etab on" style="cursor:default"><span class="mute">${esc(proj().name)} ›</span><span class="dot s-${t.state}"></span><span class="mono">${t.id}</span><span class="mute">${t.kind === "design" ? "design" : "code"}</span></span>` +
-    `<span class="tools"><button class="ib" data-view="side" title="Toggle side (Ctrl+B)">⇤</button><button class="ib dev" data-view="bottom" title="Toggle bottom (Ctrl+J)">⇩</button><button class="ib dev" data-view="right" title="Toggle right (Ctrl+Alt+B)">⇥</button></span>`;
-  $("th").innerHTML = `<h2>${dv() ? `<span class="mono" style="font-size:14px">${t.id}</span> · ` : ""}${esc(t.title)}</h2>
-    <span class="chip"><span class="dot s-${t.state}"></span>${stateWord[t.state]}</span>
-    <span class="chip dev">${t.tok} tokens</span>${t.claims ? `<span class="chip pow">holds ${t.claims} claim${t.claims > 1 ? "s" : ""}</span>` : ""}
-    ${proj().dev ? `<span class="chip" style="border-color:var(--amber);color:var(--amber)">desk dev · commits to main, not pushed</span><button class="btn sm" data-act="restart">Restart desk…</button><button class="btn sm" data-act="rollback">Roll back</button>` : ""}<div class="spacer"></div><button class="btn sm dev" data-act="viewTerm">${S.bottom && S.btab === "terminals" ? "Hide terminal" : "View terminal"}</button><button class="btn sm pow" data-act="herdr">Open in herdr-app</button>`;
-  const rv = t.state === "review", steps = [["Plan", "done"], ["Build", "done"], ["Checkpoint: diff ready", "done"], ["Adversary review", rv ? "now" : t.verdict === "pass" ? "done" : ""], ["You decide", t.state === "blocked" ? "now" : ""], ["Commit", t.state === "done" ? "done" : ""]];
-  $("loop").innerHTML = steps.map(([n, k], i) => `${i ? '<span class="sep"></span>' : ""}<span class="st ${k}"><span class="n">${k === "done" ? "✓" : i + 1}</span>${n}</span>`).join("") + `<span class="spacer" style="min-width:16px"></span><span class="mute" style="white-space:nowrap">review at checkpoints, not every message</span>`;
+  // Working area = text box + output. One thin line names the thread; nothing else above the box.
+  $("th").innerHTML = `<span class="dot s-${t.state}"></span><b class="mono">${dv() ? t.id : ""}</b><span class="ttl">${esc(t.title)}</span><span class="mute">${stateWord[t.state]}</span>
+    ${proj().dev ? `<span class="chip" style="border-color:var(--amber);color:var(--amber)">desk dev · main, not pushed</span><button class="ib" data-act="restart" title="Restart desk">⟳</button><button class="ib" data-act="rollback" title="Roll back last commit">↶</button>` : ""}
+    <div class="spacer"></div>
+    <button class="ib dev" data-act="viewTerm" title="View terminal (herdr session)">&gt;_</button><button class="ib pow" data-act="herdr" title="Open in herdr-app">⧉</button>
+    <button class="ib" data-view="side" title="Toggle side (Ctrl+B)">⇤</button><button class="ib dev" data-view="bottom" title="Toggle bottom (Ctrl+J)">⇩</button><button class="ib dev" data-view="right" title="Toggle file panel (Ctrl+Alt+B)">⇥</button>`;
 
   const open = FINDINGS.filter((f) => !S.findings[f.id]).length;
   $("feed").innerHTML = `
@@ -620,8 +627,8 @@ function renderEditor() {
   // Text box sits on top, so newest turn goes right under it (same as the current desk).
   const fd = $("feed"); fd.append(...[...fd.children].reverse()); fd.scrollTop = 0;
   $("pfx").textContent = `browser[${t.id}]:`;
-  $("cHint").textContent = !pw() ? "" : { builder: `to builder · ${B.model}`, adversary: `to adversary · ${A.model}`, both: "to both leads", mail: "as mail to another thread" }[S.target];
-  $("sendBtn").textContent = !pw() ? "Send" : { builder: "Send to builder", adversary: "Send to adversary", both: "Send to both", mail: "Send mail" }[S.target];
+  $("cHint").textContent = !dv() ? "" : `${B.agent} · ${B.model}`;
+  $("sendBtn").textContent = "Send";
 }
 const FINDINGS = [
   { id: "f1", sev: "high", txt: "<code>ensurePane</code> reuses a terminal by label but never checks the machine; after a move it would type into the old host.", file: "src/adapters/mux/hc.ts:41" },
@@ -658,6 +665,22 @@ function renderRight() {
   if (S.file && !filesOf(thr()).some((x) => x.path === S.file)) S.file = null;
   $("rtabs").innerHTML = `<span class="rtab on" style="cursor:default">File</span>`;
   $("rightBody").innerHTML = S.file ? renderFileView() : `<div class="mute" style="padding:16px;font-size:12.5px">Click a file under Files on the left to see it here.</div>`;
+}
+
+// ---------- ⋯ menu next to Send (like the current desk): send target, agent commands, desk commands ----------
+const CMDS = {
+  claude: [["/compact", "summarize the session to free context"], ["/clear", "start the session fresh"], ["/model", "switch model in this session"], ["/review", "review the current changes"], ["/cost", "tokens and cost so far"], ["/<command>", "any Claude command, passed as typed"]],
+  codex: [["/compact", "summarize to free context"], ["/diff", "show the working-tree diff"], ["/model", "switch model"], ["/approvals", "change what needs approval"], ["/status", "session and limits"], ["/<command>", "any Codex command, passed as typed"]],
+};
+function renderCmdMenu() {
+
+  const it = (b, sp, attrs = "") => `<button class="it" ${attrs}><b>${esc(b)}</b><span>${esc(sp)}</span></button>`;
+  const tgt = "";
+  const agentCmds = Object.entries(AGENTS).map(([k, a]) => `<div class="gh">${a.label} commands${a.installed ? "" : ` <span style="text-transform:none;letter-spacing:0">· not installed on ${proj().machine}</span>`}</div>` +
+    CMDS[k].map(([c, h]) => it(c, h, a.installed ? `data-cmd="${c}"` : "disabled")).join("")).join("");
+  const desk = `<div class="gh">Desk</div>` + [["Stop", "stop the running turn", "stop"], ["Close / reopen thread", "fold this thread away; nothing is deleted", "close"], ["c: <id> message", "continue another thread or window", "c: "], ["mail: code-N message", "mail another thread", "mail: "], ["new: message", "separate session, not your open window", "new: "], ["Sessions", "named herdr sessions: attach or close", "sessions"], ["Schedules", "scheduled prompts: next run, run now", "schedules"]]
+    .map(([l, h, k]) => it(l, h, `data-dcmd="${k}"`)).join("");
+  $("sendMenu").innerHTML = tgt + agentCmds + desk;
 }
 
 // ---------- pop-ups (pair, session, context) ----------
@@ -741,7 +764,7 @@ function openPal(on) { $("pal").classList.toggle("open", on); $("scrim").classLi
 
 // ---------- actions ----------
 function focusMode() { const any = S.side || S.right || S.bottom; S.side = S.right = S.bottom = !any; applyLayout(); toast(any ? "Focus mode: panels hidden" : "Panels back"); }
-function setProfile(k) { S.profile = k; if (!pw() && S.view !== "threads" && S.view !== "search") S.view = "threads"; if (!pw()) S.target = "builder"; render(); toast(`Profile: ${PROFILES[k].label}`); }
+function setProfile(k) { S.profile = k; if (!pw() && S.view !== "threads" && S.view !== "search") S.view = "threads"; render(); toast(`Profile: ${PROFILES[k].label}`); }
 function go(p, t) { S.project = p; S.thread = t ?? D.threads[p][0].id; S.findings = {}; openPal(false); openDrawer(false); render(); }
 function act(a) {
   const msgs = { allow: "Allowed once", allowAlways: "Allowed for this thread", deny: "Denied", answer: "Answer sent", restart: "Restart needs tests passing + your OK", rollback: "Would revert last commit on main",
@@ -774,13 +797,14 @@ document.addEventListener("click", (e) => {
   if (!el) return;
   if (el.id === "projBtn") return $("projMenu").classList.toggle("open");
   if (el.id === "profBtn") return $("profMenu").classList.toggle("open");
-  if (el.id === "sendMore") return $("sendMenu").classList.toggle("open");
+  if (el.id === "sendMore") { renderCmdMenu(); return $("sendMenu").classList.toggle("open"); }
+  if (el.dataset.cmd) { const c = el.dataset.cmd; if (c === "/<command>") { $("msg").value = "/" + $("msg").value; $("msg").focus(); return; } return toast(`${c} sent as typed`); }
+  if (el.dataset.dcmd) { const k = el.dataset.dcmd; if (k.endsWith(": ")) { if (!$("msg").value.startsWith(k)) $("msg").value = k + $("msg").value; $("msg").focus(); return; } return toast({ stop: "Stopped the running turn", close: "Thread folded away", sessions: "Sessions list (attach / close)", schedules: "Schedules list" }[k]); }
   if (el.dataset.p) return go(el.dataset.p);
   if (el.dataset.prof) return setProfile(el.dataset.prof);
   if (el.dataset.t) { S.thread = el.dataset.t; S.file = null; S.right = false; S.findings = {}; renderSide(); renderFiles(); renderEditor(); renderBottom(); renderRight(); renderStatus(); return applyLayout(); }
   if (el.dataset.file) { S.file = el.dataset.file; S.right = true; if (S.sizes.right < 460) S.sizes.right = 520; renderFiles(); renderRight(); return applyLayout(); }
   if (el.dataset.pop) return openPop(el.dataset.pop, el);
-  if (el.dataset.tg) { S.target = el.dataset.tg; return renderEditor(); }
   if (el.dataset.btab) { S.btab = el.dataset.btab; renderBottom(); return persist(); }
   if (el.dataset.view) return toggleView(el.dataset.view === "side" ? S.view : el.dataset.view);
   if (el.dataset.fa) { const f = el.closest(".fnd").dataset.f; if (el.dataset.fa === "undo") delete S.findings[f]; else S.findings[f] = el.dataset.fa; renderEditor(); renderBottom(); return; }
@@ -791,7 +815,7 @@ document.addEventListener("click", (e) => {
     case "drawerX": case "scrim": openDrawer(false); openPal(false); return;
     case "kbar": return openPal(true);
     case "reviewNow": return toast("Adversary reviewing current diff…");
-    case "sendBtn": { const v = $("msg").value.trim(); if (!v) return toast("Type a message"); $("feed").insertAdjacentHTML("afterbegin", `<div class="turn me"><div class="who">you${pw() ? ` · <span class="mono">browser[${thr().id}]</span> → ${S.target}` : ""}</div><div class="body">${esc(v)}</div></div>`); $("msg").value = ""; $("feed").scrollTop = 0; return; }
+    case "sendBtn": { const v = $("msg").value.trim(); if (!v) return toast("Type a message"); $("feed").insertAdjacentHTML("afterbegin", `<div class="turn me"><div class="who">you${pw() ? ` · <span class="mono">browser[${thr().id}]</span>` : ""}</div><div class="body">${esc(v)}</div></div>`); $("msg").value = ""; $("feed").scrollTop = 0; return; }
   }
 });
 document.addEventListener("change", (e) => {
