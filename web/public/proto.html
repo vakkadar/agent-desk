@@ -170,7 +170,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .composer { border-bottom: 1px solid var(--line); background: var(--panel); padding: 8px 16px 10px; flex: none; }
 .cbox { border: 1px solid var(--line-strong); border-radius: 10px; background: var(--card); padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
 .cbox:focus-within { border-color: var(--acc); box-shadow: 0 0 0 3px var(--acc-soft); }
-.cbox textarea { border: 0; outline: 0; resize: none; background: transparent; min-height: 40px; }
+.cbox textarea { border: 0; outline: 0; resize: vertical; background: transparent; min-height: 120px; max-height: 45vh; line-height: 1.5; font-size: 14px; }
 .crow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pfx { font-family: var(--mono); font-size: 12px; background: var(--acc-soft); color: var(--acc); padding: 1px 8px; border-radius: 6px; font-weight: 600; }
 .split { display: inline-flex; position: relative; }
@@ -312,7 +312,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
       <div class="loop dev" id="loop"></div>
       <div class="composer">
         <div class="cbox">
-          <textarea id="msg" rows="2" placeholder="Message (Ctrl+Enter to send)"></textarea>
+          <textarea id="msg" rows="5" placeholder="Message (Ctrl+Enter to send)"></textarea>
           <div class="crow">
             <span class="pfx dev" id="pfx"></span><span class="mute" style="font-size:12px" id="cHint"></span>
             <div class="spacer"></div>
@@ -776,6 +776,8 @@ document.addEventListener("change", (e) => {
   if (el.dataset.agent) { const k = el.dataset.agent; S.pair[k] = { agent: el.value, model: AGENTS[el.value].models[0] }; render(); }
   else if (el.dataset.model) { S.pair[el.dataset.model].model = el.value; render(); }
 });
+// Grow with the text, up to 45% of the screen; drag the corner to resize by hand.
+$("msg").addEventListener("input", (e) => { const t = e.target; t.style.height = "auto"; t.style.height = Math.min(Math.max(t.scrollHeight, 120), innerHeight * 0.45) + "px"; });
 $("msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("sendBtn").click(); } });
 $("palIn").addEventListener("input", () => { palSel = 0; renderPal(); });
 $("palIn").addEventListener("keydown", (e) => {
