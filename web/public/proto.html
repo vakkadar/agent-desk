@@ -160,6 +160,7 @@ header { display: flex; align-items: center; gap: 8px; padding: 6px 10px; backgr
 .card.approve { border-color: var(--amber); } .card.mailc { border-color: var(--acc); }
 .fnd { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 7px 0; border-top: 1px solid var(--line); }
 .fnd:first-child { border-top: 0; }
+.acts-inline { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .sev { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; margin-top: 2px; }
 .sev.high { background: var(--warn-soft); color: var(--warn); } .sev.med { background: var(--amber-soft); color: var(--amber); } .sev.low { background: var(--sunk); color: var(--mute); }
 .fnd .acts { display: flex; gap: 4px; }
@@ -604,13 +605,13 @@ function renderEditor() {
         <div class="diff dev"><span class="d">-  if (cfg.mux === "herdr") {</span>
 <span class="a">+  if (cfg.mux === "hc" || cfg.mux === "auto") {</span>
 <span class="a">+    const hc = await HcMux.connect(cfg);</span></div></div></div>
-    <div class="card mailc pow"><div class="ch"><span class="mono" style="font-weight:600">✉ code-6 → code-3</span><span class="tag v-changes">waiting on your claim</span><div class="spacer"></div><span class="mute">2m</span></div>
-      <div class="cb"><div>${esc(D.mail[0].text)}</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="release">Release claim after commit</button><button class="btn sm" data-act="reply">Let builder reply</button><button class="btn ghost sm" data-act="snooze">Later</button></div></div></div>
-    <div class="card dev"><div class="ch"><span class="dot" style="background:var(--warn)"></span><b>Adversary review</b><span class="mute">${A.agent} · ${A.model} · 3 files</span><div class="spacer"></div><span class="tag ${open ? "v-changes" : "v-pass"}">${open ? "changes needed" : "pass"}</span></div>
-      <div class="cb">${FINDINGS.map(fRow).join("")}</div>
-      <div class="ch" style="border-top:1px solid var(--line);border-bottom:0"><span class="mute" style="font-size:12.5px">${open ? `${open} open · fixes go back to the builder` : "All handled."}</span><div class="spacer"></div><button class="btn sm" data-act="dismissAll">Dismiss all</button><button class="btn pri sm" data-act="sendFixes">Send fixes to builder</button></div></div>
-    <div class="card approve"><div class="ch"><span class="dot s-blocked"></span><b>${dv() ? "Builder" : "Claude"} wants to run</b><span class="mute pow">hp/t12</span></div>
-      <div class="cb"><div class="diff">rm -rf ~/.cache/herdr-core/t-old</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div></div>`;
+    <div class="turn"><div class="who"><span class="dot" style="background:var(--warn)"></span><b>Adversary</b><span class="dev">· ${A.agent} · ${A.model}</span></div>
+      <div class="body"><div>${open ? `Changes needed: ${open} open.` : "Pass. All findings handled."}</div>${FINDINGS.map(fRow).join("")}
+        ${open ? `<div class="acts-inline"><button class="btn pri sm" data-act="sendFixes">Send fixes to builder</button><button class="btn ghost sm" data-act="dismissAll">Dismiss all</button></div>` : ""}</div></div>
+    <div class="turn pow"><div class="who"><span class="dot" style="background:var(--acc)"></span><b class="mono">code-6</b><span>· mail</span><span class="mute">· 2m</span></div>
+      <div class="body">${esc(D.mail[0].text)}<div class="acts-inline"><button class="btn sm" data-act="release">Release claim after commit</button><button class="btn sm" data-act="reply">Let builder reply</button></div></div></div>
+    <div class="turn"><div class="who"><span class="dot s-blocked"></span><b>${dv() ? B.role : "Claude"}</b><span>· needs you</span></div>
+      <div class="body">Wants to run <code>rm -rf ~/.cache/herdr-core/t-old</code><div class="acts-inline"><button class="btn pri sm" data-act="allow">Allow once</button><button class="btn sm" data-act="allowAlways">Always in this thread</button><button class="btn sm" data-act="deny">Deny</button></div></div></div>`;
   // Text box sits on top, so newest turn goes right under it (same as the current desk).
   const fd = $("feed"); fd.append(...[...fd.children].reverse()); fd.scrollTop = 0;
   $("pfx").textContent = `browser[${t.id}]:`;
@@ -627,8 +628,8 @@ const fRow = (f) => { const st = S.findings[f.id] ?? ""; return `<div class="fnd
 
 // ---------- bottom panel ----------
 function renderBottom() {
-  const tabs = [["terminals", "Terminals", 2, false], ["review", "Review", FINDINGS.filter((f) => !S.findings[f.id]).length, false], ["mailbox", "Mailbox", D.mail.filter((m) => m.unread).length, true], ["activity", "Activity", 0, false]];
-  if (!pw() && S.btab === "mailbox") S.btab = "terminals";
+  const tabs = [["terminals", "Terminals", 2, false], ["mailbox", "Mailbox", D.mail.filter((m) => m.unread).length, true], ["activity", "Activity", 0, false]];
+  if ((!pw() && S.btab === "mailbox") || S.btab === "review") S.btab = "terminals";
   $("btabs").innerHTML = tabs.map(([k, l, n, p]) => `<button class="btab ${k === S.btab ? "on" : ""} ${p ? "pow" : ""}" data-btab="${k}">${l}${n ? `<span class="c">${n}</span>` : ""}</button>`).join("") +
     `<span class="spacer"></span><button class="ib" data-act="maxBottom" title="Maximise panel">${S.maxBottom ? "▾" : "▴"}</button><button class="ib" data-act="hideBottom" title="Close panel (Ctrl+J)">×</button>`;
   const b = $("bbody");
@@ -642,7 +643,6 @@ function renderBottom() {
 ● Read src/adapters/mux/index.ts
 ● Verdict: CHANGES (1 high, 1 med, 1 low)
   ⎿ written to review.json</div></div></div>`;
-  else if (S.btab === "review") b.innerHTML = `<table class="tbl"><tr><th>Sev</th><th>Finding</th><th>Where</th><th>State</th></tr>${FINDINGS.map((f) => `<tr><td><span class="sev ${f.sev}">${f.sev}</span></td><td>${f.txt}</td><td class="mono">${f.file}</td><td class="mute">${S.findings[f.id] ?? "open"}</td></tr>`).join("")}</table>`;
   else if (S.btab === "mailbox") b.innerHTML = `<table class="tbl"><tr><th>Kind</th><th>From</th><th>To</th><th>Message</th><th>When</th></tr>${D.mail.map((m) => `<tr><td><span class="tag ${m.kind === "claim" ? "v-changes" : m.kind === "notice" ? "v-pass" : ""}">${m.kind}</span></td><td class="mono">${m.from}</td><td class="mono">${m.to}</td><td>${esc(m.text)}</td><td class="mute">${m.t}</td></tr>`).join("")}</table>`;
   else b.innerHTML = `<table class="tbl"><tr><th>When</th><th>Thread</th><th>Event</th></tr>${[["now", "code-3", "builder blocked: needs approval"], ["2m", "code-6", "waiting on claim src/adapters/mux/** (code-3)"], ["4m", "code-3", "adversary verdict: changes"], ["12m", "code-5", "claimed src/live.ts"], ["15m", "code-3", "notice → all"], ["31m", "design-1", "committed 4a1c2e0"]].map(([a, b2, c]) => `<tr><td class="mute">${a}</td><td class="mono">${b2}</td><td>${c}</td></tr>`).join("")}</table>`;
 }
