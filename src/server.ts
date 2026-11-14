@@ -40,6 +40,7 @@ import { Pairs, sessionName as pairSession, storePick } from "./pair.js";
 import { AgentStore } from "./agents.js";
 import { deskState, desk2Action } from "./desk2-api.js";
 import { Relay } from "./relay.js";
+import { AskCards } from "./ask-card.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
 import { mailText } from "./links.js";
@@ -117,6 +118,9 @@ const agentStore = new AgentStore(cfg.dataDir);
 const pairs = new Pairs(cfg.dataDir, undefined, undefined, storePick(agentStore));
 // Carries findings reviewer → builder and fixes builder → reviewer through each thread's verdict file.
 new Relay(pairs, store).start();
+// An agent in a pair pane stopped on a question: show it as a card in the page, answer from there.
+const askCards = new AskCards(pairs, (e) => { for (const [s, f] of helloed) if (eventFor(f, e.sourceId)) s({ type: "pair_ask", ...e }); });
+askCards.start();
 // Your live_sessions plus every named session opened from the desk.
 const liveClaude = new LiveClaude(() => [...cfg.liveSessions, ...hsessions.openNames()]);
 // Persistent sessions come back with the desk (reboot, restart), resuming Claude's last conversation.
@@ -347,6 +351,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       unsub();
       unsub = bus.subscribe((e) => eventFor(f, e.sourceId) && send({ type: "event", e }));
       helloed.set(send, f);
+      for (const e of askCards.current()) if (eventFor(f, e.sourceId)) send({ type: "pair_ask", ...e });
       return;
     }
     if (role && m.type === "schedules") return send({ type: "schedules", rows: scheduler.rows() });
@@ -386,7 +391,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
     if (m.type === "compute_state") return send(await compute.state());
     if (m.type === "compute_run") return send(await compute.run(String(m.id), String(m.action), String(m.param ?? "")));
   }
-  if (await desk2Action(m, { store, pairs, send, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
+  if (await desk2Action(m, { store, pairs, send, cards: askCards, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.

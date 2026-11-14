@@ -208,6 +208,22 @@ export class Pairs {
     return done;
   }
 
+  /** What a pair pane shows now (empty when the tab is gone). */
+  async screenOf(sourceId: string, tab: string, role: Role): Promise<string> {
+    const rec = this.get(sourceId);
+    const t = rec?.tabs[tab];
+    return rec && t ? this.screen(rec.session, t[role]) : "";
+  }
+
+  /** Press keys or type text in a pair pane, as the user would (answers a question the pane shows). */
+  async typeInto(sourceId: string, tab: string, role: Role, step: { keys: string[] } | { text: string }): Promise<void> {
+    const rec = this.get(sourceId);
+    const t = rec?.tabs[tab];
+    if (!rec || !t) throw new Error(`no ${tab} pair open for ${sourceId}`);
+    if ("text" in step) await this.herdr(rec.session, ["pane", "send-text", t[role], step.text]);
+    else await this.herdr(rec.session, ["pane", "send-keys", t[role], ...step.keys]);
+  }
+
   private async screen(session: string, pane: string): Promise<string> {
     const s = await this.herdr(session, ["pane", "read", pane, "--source", "visible"]).catch(() => "");
     return typeof s === "string" ? s : JSON.stringify(s ?? "");

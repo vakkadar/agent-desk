@@ -153,6 +153,8 @@
       yes.onclick = () => { wsSend({ type: "pair_trust", sourceId: m.sourceId, threadId: m.threadId }); bar.remove(); };
       no.onclick = () => bar.remove();
       document.body.append(bar);
+    } else if (m.type === "pair_ask") {
+      askCard(m);
     } else if (m.type === "pair_trusted") {
       toast("Folder trusted: Claude is starting");
     } else if (m.type === "pair_review") {
@@ -517,4 +519,36 @@
   }
   addEventListener("hashchange", () => { if (L.on) openHash(location.hash); });
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", connect); else connect();
+  // Question cards: an agent in a pair pane waits on a question (AskUserQuestion, a permission prompt).
+  // The server reads the pane; a tap here types the picked key there. The card goes when the pane moves on.
+  const ASK = new Map(); // "source/thread/role" → { m, hidden: card JSON hidden with "Later" }
+  function askCard(m) {
+    const k = `${m.sourceId}/${m.threadId}/${m.role}`;
+    if (m.card) ASK.set(k, { m, hidden: ASK.get(k)?.hidden }); else ASK.delete(k);
+    drawAsk();
+  }
+  function drawAsk() {
+    let box = document.querySelector(".askcards");
+    if (!box) { box = document.createElement("div"); box.className = "askcards"; document.body.append(box); }
+    box.replaceChildren();
+    for (const [k, { m, hidden }] of ASK) {
+      const c = m.card, sig = JSON.stringify(c);
+      if (hidden === sig) continue;
+      const el = document.createElement("div");
+      el.className = "askcard";
+      const send = (a) => wsSend({ type: "pair_ask_answer", sourceId: m.sourceId, threadId: m.threadId, role: m.role, question: c.question, ...a });
+      const tabs = c.tabs ? `<div class="tabs">${c.tabs.map((t) => `<span class="${t.done ? "done" : ""}">${t.done ? "✓ " : ""}${esc(t.label)}</span>`).join("")}</div>` : "";
+      el.innerHTML = `<div class="who"><span>${esc(m.role)} · ${esc(m.threadId)} asks</span><button type="button" data-later>Later</button></div>${tabs}
+        <div class="q">${esc(c.question)}</div>${c.note ? `<div class="note">${esc(c.note)}</div>` : ""}
+        ${c.options.filter((o) => !o.other).map((o) => `<button type="button" class="opt${o.checked ? " on" : ""}" data-n="${o.n}">${o.checked !== undefined ? (o.checked ? "☑ " : "☐ ") : ""}${esc(o.label)}${o.desc ? `<small>${esc(o.desc)}</small>` : ""}</button>`).join("")}
+        ${c.options.some((o) => o.other) ? `<form><input placeholder="Type an answer" aria-label="Type an answer"><button type="submit">Send</button></form>` : ""}
+        ${c.multi || c.tabs ? `<button type="button" class="opt" data-next>Next →</button>` : ""}`;
+      el.querySelector("[data-later]").onclick = () => { ASK.get(k).hidden = sig; drawAsk(); };
+      for (const b of el.querySelectorAll("[data-n]")) b.onclick = () => send({ pick: Number(b.dataset.n) });
+      el.querySelector("[data-next]")?.addEventListener("click", () => send({ next: true }));
+      const f = el.querySelector("form");
+      if (f) f.onsubmit = (e) => { e.preventDefault(); const t = f.querySelector("input").value.trim(); if (t) send({ text: t }); };
+      box.append(el);
+    }
+  }
 })();

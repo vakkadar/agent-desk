@@ -285,6 +285,22 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .trustbar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 51; display: flex; gap: 12px; align-items: center; background: var(--card); color: var(--fg); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18); max-width: calc(100% - 32px); font-size: 13px; }
 .trustbar small { display: block; color: var(--mute); word-break: break-all; }
 .trustbar button { flex: none; }
+.askcards { position: fixed; right: 16px; bottom: 16px; z-index: 52; display: flex; flex-direction: column; gap: 10px; width: 380px; max-width: calc(100% - 32px); max-height: calc(100% - 32px); overflow-y: auto; }
+.askcard { background: var(--card); color: var(--fg); border: 1px solid var(--line2); border-radius: 10px; padding: 12px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18); font-size: 13px; }
+.askcard .who { color: var(--mute); font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+.askcard .who button { background: none; border: 0; color: var(--mute); cursor: pointer; padding: 0; font: inherit; }
+.askcard .q { font-weight: 600; margin: 6px 0 8px; }
+.askcard .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.askcard .tabs span { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line2); color: var(--mute); }
+.askcard .tabs span.done { color: var(--fg); }
+.askcard .note { color: var(--mute); margin-bottom: 8px; }
+.askcard .opt { display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line2); background: transparent; color: var(--fg); cursor: pointer; font: inherit; }
+.askcard .opt:hover { border-color: var(--fg); }
+.askcard .opt.on { border-color: var(--fg); font-weight: 600; }
+.askcard .opt small { display: block; color: var(--mute); font-weight: 400; }
+.askcard form { display: flex; gap: 6px; margin-top: 2px; }
+.askcard form input { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line2); background: transparent; color: var(--fg); font: inherit; }
+@media (max-width: 640px) { .askcards { left: 16px; right: 16px; width: auto; } }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 50; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
 .toast.on { opacity: 1; }
 .only-phone { display: none !important; }

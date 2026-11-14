@@ -12,6 +12,7 @@ import { isSelfSource } from "./self-dev.js";
 import { DESK_CHECK, linkDeps, type DeskApplies } from "./desk-apply.js";
 import type { DeskPreviews } from "./desk-preview.js";
 import { excludeDesk } from "./relay.js";
+import type { AskCards, CardAnswer } from "./ask-card.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -24,6 +25,7 @@ export interface Desk2Ctx {
   events: () => Promise<DeskEvent[]>; // the event journal (prompts carry mentions and mail)
   applies?: DeskApplies; // Desk perspective (admin only; server gates desk_* types on "self")
   previews?: DeskPreviews;
+  cards?: AskCards; // questions agents in pair panes are waiting on
 }
 
 /** What the Desk perspective shows: apply history (newest first) and running previews. */
@@ -75,6 +77,15 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       const tab = m.threadId && m.threadId !== "ask" ? String(m.threadId) : "lead";
       const roles = await c.pairs.acceptTrust(rec.id, tab);
       c.send({ type: "pair_trusted", sourceId: rec.id, threadId: tab, roles });
+      return true;
+    }
+    case "pair_ask_answer": {
+      // The user answered a question card: pick an option, type an answer, or move to the next question.
+      if (!c.cards) throw new Error("question cards are off");
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const role = m.role === "reviewer" ? "reviewer" : "builder";
+      const a: CardAnswer = m.next === true ? { next: true } : typeof m.text === "string" ? { text: m.text } : { pick: Number(m.pick) };
+      await c.cards.answer(rec.id, String(m.threadId), role, String(m.question), a);
       return true;
     }
     case "pair_close": {
