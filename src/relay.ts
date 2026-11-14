@@ -40,13 +40,18 @@ export function relaySteps(v: Verdict, path: string, st: RelayState): RelayMsg[]
       Re-check each in the code yourself. In ${path} set "verified" when it really is fixed, or back to "open" with a "note" saying what is still wrong
       (after a second failed round use "disputed" for the user). Increase "round" by one.`),
   });
-  for (const m of out) for (const id of m.ids) {
+  for (const m of out) markSent(v, m, st);
+  return out;
+}
+
+/** Record one message as relayed (so it is not sent again, and a builder bounce counts). */
+export function markSent(v: Verdict, m: RelayMsg, st: RelayState): void {
+  for (const id of m.ids) {
     const f = v.findings.find((x) => x.id === id)!;
     st.sent.push(key(f));
     if (m.to === "builder") st.bounces[id] = (st.bounces[id] ?? 0) + 1;
   }
   st.sent = st.sent.slice(-500);
-  return out;
 }
 
 const statePath = (verdict: string) => join(dirname(verdict), "relay.json");
@@ -87,12 +92,13 @@ export class Relay {
     const v = parseVerdict(raw);
     if (!v) return []; // half-written: try again next tick
     const st = await loadState(path);
-    const msgs = relaySteps(v, path, st);
-    for (const m of msgs) {
+    const msgs = relaySteps(v, path, structuredClone(st));
+    for (const m of msgs) { // saved after each send: a later failure must not resend an earlier message
       await this.pairs.sendTo(sourceId, tab, m.to, m.text);
+      markSent(v, m, st);
+      await writeFile(statePath(path), JSON.stringify(st) + "\n");
       this.log(`[relay] ${sourceId}/${tab} → ${m.to}: ${m.ids.join(", ")}`);
     }
-    if (msgs.length) await writeFile(statePath(path), JSON.stringify(st) + "\n");
     this.seen.set(path, raw);
     return msgs;
   }

@@ -59,6 +59,29 @@ test("Relay.tick reads each thread's verdict, types into the right pane, and doe
   assert.deepEqual(sent, ["code-1:builder", "code-1:reviewer"]);
 });
 
+test("Relay.tick: when the second send fails, the first is not resent on the next tick", async () => {
+  const root = mkdtempSync(join(tmpdir(), "relay-"));
+  const wt = join(root, "wt");
+  mkdirSync(join(wt, ".desk"), { recursive: true });
+  writeFileSync(join(wt, ".desk", "review.json"), JSON.stringify(v([
+    { id: "F1", severity: "low", text: "a", status: "open" },
+    { id: "F2", severity: "low", text: "b", status: "claimed", note: "done" },
+  ])));
+  const sent: string[] = [];
+  let failReviewer = true;
+  const pairs: any = { list: () => [{ sourceId: "s1", tabs: { "code-1": {} } }], sendTo: async (_s: string, _t: string, role: string) => {
+    if (role === "reviewer" && failReviewer) throw new Error("pane at shell");
+    sent.push(role);
+  } };
+  const store: any = { get: () => ({ id: "s1", location: root, threads: { "code-1": { id: "code-1", worktree: wt } } }) };
+  const r = new Relay(pairs, store, () => {});
+  await r.tick();
+  assert.deepEqual(sent, ["builder"]);
+  failReviewer = false;
+  await r.tick();
+  assert.deepEqual(sent, ["builder", "reviewer"]);
+});
+
 test("excludeDesk adds .desk/ to the repo's local exclude once", async () => {
   const repo = mkdtempSync(join(tmpdir(), "relay-git-"));
   execFileSync("git", ["init", "-q", repo]);
