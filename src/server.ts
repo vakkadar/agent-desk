@@ -206,7 +206,8 @@ const http = createServer(async (req, res) => {
     return;
   }
   const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
-  const file = join(webRoot, path === "/" ? "index.html" : path);
+  // "/" is the new desk (desk2.html); the classic desk stays at /index.html.
+  const file = join(webRoot, path === "/" ? "desk2.html" : path);
   if (!file.startsWith(webRoot)) {
     res.writeHead(400).end();
     return;

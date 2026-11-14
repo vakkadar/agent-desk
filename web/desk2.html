@@ -703,7 +703,7 @@ function act(a, el) {
     case "closeView": S.view = "thread"; return render();
     case "needs": { const n = NEEDS[0]; return go(n.place, n.thread); }
     case "theme": closeMenu(); return theme();
-    case "classic": location.href = "/" + location.hash; return;
+    case "classic": location.href = "/index.html" + location.hash; return;
     case "notes": return view("notes");
     case "history": return view("history");
     case "attachProject": return view("attach");

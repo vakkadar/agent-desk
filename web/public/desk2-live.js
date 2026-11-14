@@ -103,6 +103,7 @@
       if (S.deskDev) wsSend({ type: "desk_state" }); else { DESK.applies = []; DESK.previews = []; }
       refreshThread();
       if (L.prefill) { const ta = $("msg"); if (ta) { ta.value = L.prefill.text; ta.focus(); } L.prefill = false; }
+      openHash(location.hash);
     } else if (m.type === "sources") {
       const before = new Set(L.sources.flatMap((s) => Object.keys(s.threads).map((t) => `${s.id}/${t}`)));
       L.sources = m.sources; rebuild();
@@ -431,5 +432,15 @@
     else if (b.dataset.base) setTimeout(refreshThread, 0);
     else if (b.dataset.cmd && b.dataset.cmd !== "/<command>" && thr()) { e.stopImmediatePropagation(); closeMenu(); wsSend({ type: "prompt", sourceId: S.place, threadId: thr().id, text: b.dataset.cmd }); }
   }, true);
+  // Links into a thread (alerts, the classic desk): #source=<id>&thread=<id>. Opened once, then dropped from the URL.
+  function openHash(h) {
+    const q = new URLSearchParams(String(h).slice(1)), src = q.get("source"), th = q.get("thread");
+    if (!src || !th || !L.sources.some((x) => x.id === src && x.threads[th])) return;
+    q.delete("source"); q.delete("thread");
+    history.replaceState(null, "", location.pathname + location.search + (q.toString() ? "#" + q : ""));
+    S.view = "thread";
+    go(src, th);
+  }
+  addEventListener("hashchange", () => { if (L.on) openHash(location.hash); });
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", connect); else connect();
 })();
