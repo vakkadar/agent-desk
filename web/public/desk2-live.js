@@ -86,7 +86,7 @@
     const t = thr();
     if (!t || !t.kind || t.kind === "ask") return;
     wsSend({ type: "files", sourceId: S.place, threadId: t.id, base: S.diffBase === "last" ? "last" : "start" });
-    if (t.kind === "code") wsSend({ type: "review", sourceId: S.place, threadId: t.id });
+    if (t.kind === "code") { wsSend({ type: "review", sourceId: S.place, threadId: t.id }); wsSend({ type: "branch", sourceId: S.place, threadId: t.id }); }
   }
   function onMsg(m) {
     if (m.type !== "welcome" && X()?.onMsg(m, L.events)) return;
@@ -132,6 +132,15 @@
       for (const k of Object.keys(L.diffs)) if (k.startsWith(m.threadId + "|")) delete L.diffs[k];
       if (L.wantFile && m.threadId === S.thread && FILES[m.threadId].some((f) => f.path === L.wantFile)) { S.file = L.wantFile; L.wantFile = null; layout(); }
       renderFiles(); renderRight();
+    } else if (m.type === "branch") {
+      BRANCH[m.threadId] = { deliverable: m.deliverable, research: m.research ?? [], dir: m.researchDir };
+      renderFiles();
+    } else if (m.type === "research_note") {
+      const n = BRANCH[m.threadId]?.research.find((x) => x.name === m.name);
+      $("noteTitle").textContent = `${m.threadId} · ${n?.title ?? m.name}`; $("noteBody").textContent = m.text; $("note").showModal();
+    } else if (m.type === "pr_opened") {
+      const b = BRANCH[m.threadId]; if (b?.deliverable && !b.deliverable.error) b.deliverable.pr = m.pr;
+      toast(`PR #${m.pr.number} opened`); renderFiles();
     } else if (m.type === "file_diff") {
       L.diffs[`${m.threadId}|${m.path}|${S.diffBase}`] = parseDiff(m.diff); renderRight();
     } else if (m.type === "review") {
@@ -300,6 +309,13 @@
     switch (a) {
       case "stop": return wsSend({ type: "cancel", ...ids });
       case "reviewNow": return wsSend({ type: "pair_review", ...ids }); // builder self-checks first (src/skeptic.ts)
+      case "prOpen": { const d = BRANCH[t?.id]?.deliverable; if (!d || d.error) return;
+        if (!confirm(`Push ${d.branch} to ${d.remote} and open a pull request from its ${d.ahead} commit(s)?`)) return;
+        toast("Opening PR…"); return wsSend({ type: "pr_open", ...ids }); }
+      case "note": return wsSend({ type: "research_read", ...ids, name: el.dataset.note });
+      case "research": { const b = BRANCH[t?.id], ta = $("msg"); if (!b || !ta) return;
+        ta.value = `Research: <what to find out>. Do not change code for this. Write what you find (sources, options, a recommendation) as markdown to ${b.dir}/<short-name>.md, starting with a # title.`;
+        ta.focus(); const i = ta.value.indexOf("<what"); ta.setSelectionRange(i, i + 20); return; }
       case "merge": return wsSend({ type: "merge_enqueue", ...ids });
       case "terminal": L.wantTerm = S.place; return wsSend({ type: "pair_open", ...ids }); // pair in herdr, shown in the terminal panel
       case "terminalPanel": closeMenu(); return X() ? X().toggleTerminal() : toast("Terminal needs the built desk (npm run build)");

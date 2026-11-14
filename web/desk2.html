@@ -236,6 +236,11 @@ dialog.dlg.look .sw { width: 10px; height: 10px; border-radius: 50%; background:
 .fhead { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 6px 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); flex: none; }
 .fbody { flex: 1; overflow: auto; min-height: 0; padding-bottom: 8px; }
 .fsub { padding: 6px 12px 2px; font-size: 11px; color: var(--mute); font-weight: 600; }
+.fsub .ib { width: 20px; height: 20px; font-size: 13px; margin-left: 4px; vertical-align: middle; }
+.deliv { display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12.5px; flex-wrap: wrap; } .deliv .mono { font: 12px var(--mono); }
+.frow .fn2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow.cm .st { width: auto; color: var(--mute); font-weight: 400; } div.frow { cursor: default; } div.frow.mute { font-size: 12px; }
+dialog.note pre { white-space: pre-wrap; font: 12.5px/1.5 var(--mono); max-height: 70vh; overflow: auto; margin: 0; }
 .frow { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; text-align: left; padding: 4px 12px; font-size: 12.5px; min-height: 28px; }
 .frow:hover { background: var(--hover); } .frow.on { background: var(--acc-soft); }
 .frow .st { font: 700 11px var(--mono); width: 12px; } .st.A { color: var(--ok); } .st.M { color: var(--amber); } .st.D { color: var(--warn); }
@@ -573,13 +578,37 @@ function renderTree() {
   if (dv()) h += `<button class="row" data-act="attachProject" style="color:var(--mute);margin-top:6px"><span class="id">+</span><span class="t">Add a project</span></button>`;
   $("tree").innerHTML = h;
 }
+// Code threads (live): Deliverable = branch, commits, PR; Research = notes in .desk/research/<thread>/ (src/branches.ts).
+const BRANCH = {};
+function branchHtml(t) {
+  const b = t && t.kind === "code" && BRANCH[t.id];
+  if (!b) return "";
+  const d = b.deliverable;
+  let h = `<div class="fsub">Deliverable</div>`;
+  if (!d) h += `<div class="frow mute">No branch: this thread has no worktree.</div>`;
+  else if (d.error) h += `<div class="frow mute">${esc(d.error)}</div>`;
+  else {
+    const pr = d.pr ? `<a class="pill p-${d.pr.state === "open" ? "ok" : d.pr.state === "closed" ? "red" : "mute"}" href="${esc(d.pr.url)}" target="_blank" rel="noopener" title="${esc(d.pr.title)}">PR #${d.pr.number} ${d.pr.draft ? "draft" : esc(d.pr.state)}</a>`
+      : d.remote ? `<button class="btn sm" data-act="prOpen" ${d.ahead ? "" : "disabled"} title="${d.ahead ? `Push ${esc(d.branch)} to ${esc(d.remote)} and open a pull request` : "No commits on the branch yet"}">Open PR</button>`
+      : `<span class="mute" title="The project has no git remote: merge it from the desk">local only</span>`;
+    h += `<div class="deliv"><span class="mono">${esc(d.branch)}</span><span class="mute">${d.ahead} commit${d.ahead === 1 ? "" : "s"}${d.dirty ? ` · ${d.dirty} uncommitted` : ""}</span><span class="sp"></span>${pr}</div>`;
+    if (d.prError) h += `<div class="frow mute" title="${esc(d.prError)}">PR status unknown: ${esc(d.prError.slice(0, 80))}</div>`;
+    const shown = d.commits.slice(0, 5);
+    h += shown.map((c) => `<div class="frow cm" title="${esc(c.at)}"><span class="st mono">${esc(c.sha.slice(0, 7))}</span><span class="fn2">${esc(c.subject)}</span></div>`).join("");
+    if (d.ahead > shown.length) h += `<div class="frow mute">… ${d.ahead - shown.length} more</div>`;
+  }
+  h += `<div class="fsub">Research<button class="ib" data-act="research" title="Ask this thread to research something and write it up here">＋</button></div>`;
+  h += b.research.length ? b.research.map((n) => `<button class="frow" data-act="note" data-note="${esc(n.name)}" title="${esc(n.name)} · ${esc(n.at.slice(0, 16).replace("T", " "))}"><span class="st">✎</span><span class="fn2">${esc(n.title)}</span></button>`).join("")
+    : `<div class="frow mute">No notes yet. ＋ asks the thread to research and write one.</div>`;
+  return h;
+}
 function renderFiles() {
   const t = thr(), fs = (t && FILES[t.id]) || [];
   const row = (f) => `<button class="frow ${S.file === f.path ? "on" : ""}" data-file="${esc(f.path)}" title="${esc(f.path)}"><span class="st ${f.st}">${f.st}</span><span class="fn">&lrm;${esc(f.path)}</span><span class="ct">${f.a ? `<span class="a">+${f.a}</span>` : ""}${f.d ? ` <span class="d">−${f.d}</span>` : ""}</span></button>`;
   const out = fs.filter((f) => !isSupport(f.path)), sup = fs.filter((f) => isSupport(f.path));
   $("files").className = "files dev" + (S.filesMin ? " min" : "");
   $("files").innerHTML = `<div class="fhead">Files${t ? ` · ${t.id}` : ""}<span class="sp"></span><button class="ib" data-act="filesMin" title="${S.filesMin ? "Show" : "Hide"} files">${S.filesMin ? "▴" : "▾"}</button></div>
-    <div class="fbody">${fs.length ? `${out.length ? `<div class="fsub">Output</div>${out.map(row).join("")}` : ""}${sup.length ? `<div class="fsub">Supporting</div>${sup.map(row).join("")}` : ""}` : `<div class="mute" style="padding:6px 12px;font-size:12.5px">No files changed${t && !t.kind ? " (questions don't change files)" : ""}.</div>`}</div>`;
+    <div class="fbody">${branchHtml(t)}${fs.length ? `${out.length ? `<div class="fsub">Output</div>${out.map(row).join("")}` : ""}${sup.length ? `<div class="fsub">Supporting</div>${sup.map(row).join("")}` : ""}` : `<div class="mute" style="padding:6px 12px;font-size:12.5px">No files changed${t && !t.kind ? " (questions don't change files)" : ""}.</div>`}</div>`;
 }
 
 // ================= middle =================
@@ -980,6 +1009,7 @@ render();
 <dialog id="health" class="dlg"><div class="hhead"><b>Health</b><button type="button" id="healthClose">Close</button></div><div id="healthBody"></div></dialog>
 <dialog id="hsessions" class="dlg"><div class="hhead"><b>Sessions</b><button type="button" id="hsClose">Close</button></div><div id="hsBody"></div><form id="hsPin" hidden><label></label><div class="row"><input type="password" class="inp" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Session PIN" /><button>OK</button></div></form></dialog>
 <dialog id="agents" class="dlg"><div class="hhead"><b>Settings · Agents</b><button type="button" id="agentsClose">Close</button></div><div id="agentsBody"></div></dialog>
+<dialog id="note" class="dlg note"><div class="hhead"><b id="noteTitle">Research</b><button type="button" onclick="this.closest('dialog').close()">Close</button></div><pre id="noteBody"></pre></dialog>
 <dialog id="look" class="dlg look"><div class="hhead"><b>Appearance</b><button type="button" onclick="this.closest('dialog').close()">Close</button></div><div id="lookBody"></div><p class="mute" style="font-size:12.5px;margin:8px 0 0">Kept in this browser only.</p></dialog>
 <dialog id="help" class="dlg help"><div class="hhead"><b>Help</b><button type="button" onclick="this.closest('dialog').close()">Close</button></div>
 <h4>Keys</h4>

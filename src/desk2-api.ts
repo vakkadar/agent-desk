@@ -17,6 +17,7 @@ import type { AskCards, CardAnswer } from "./ask-card.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pairModels, type ModelMap } from "./models.js";
+import { deliverable, ensureResearchDir, openPr, readResearch, research } from "./branches.js";
 
 export interface Desk2Ctx {
   store: ThreadStore;
@@ -138,6 +139,33 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
         await c.pairs.sendTo(rec.id, th.id, "reviewer", reviewerBrief(th.id, path, base));
       }
       c.send({ type: "pair_review", sourceId: rec.id, threadId: th.id, path, skeptic });
+      return true;
+    }
+    case "branch": {
+      // Deliverable (branch, commits, PR) and Research notes of a code thread.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      if (rec.kind !== "local") throw new Error("branches are for local projects");
+      const [d, notes, dir] = await Promise.all([
+        th.branch ? deliverable(rec.location, th).catch((e) => ({ error: String(e.message) })) : null,
+        research(rec.location, th.id),
+        ensureResearchDir(rec.location, th.id),
+      ]);
+      c.send({ type: "branch", sourceId: rec.id, threadId: th.id, deliverable: d, research: notes, researchDir: dir });
+      return true;
+    }
+    case "research_read": {
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      c.send({ type: "research_note", sourceId: rec.id, threadId: th.id, name: String(m.name), text: await readResearch(rec.location, th.id, String(m.name)) });
+      return true;
+    }
+    case "pr_open": {
+      // Push the thread's branch and open a PR on the project's remote. Only on the user's click.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const th = need(rec.threads[String(m.threadId)], "thread");
+      const pr = await openPr(rec.location, th, m.draft === true);
+      c.send({ type: "pr_opened", sourceId: rec.id, threadId: th.id, pr });
       return true;
     }
     case "merge_enqueue": {
