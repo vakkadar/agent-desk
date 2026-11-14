@@ -45,6 +45,7 @@ export class ClaudeAgent implements AgentAdapter {
     // With approvals on, force "default" so the user's own defaultMode (e.g. auto) doesn't bypass prompts.
     const pm = ctx?.permissionMode ?? this.opts.permissionMode ?? (this.opts.approvalBase ? "default" : undefined);
     if (pm) a.push("--permission-mode", pm);
+    if (ctx?.model) a.push("--model", ctx.model);
     if (this.opts.approvalBase && ctx) {
       const url = `${this.opts.approvalBase}/${encodeURIComponent(ctx.sourceId)}/${encodeURIComponent(ctx.threadId)}`;
       a.push("--mcp-config", JSON.stringify({ mcpServers: { desk: { type: "http", url } } }));

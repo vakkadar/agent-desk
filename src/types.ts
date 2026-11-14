@@ -57,6 +57,8 @@ export interface TurnCtx {
   signal?: AbortSignal;
   /** Claude --permission-mode for this turn; overrides the adapter default. */
   permissionMode?: string;
+  /** Claude --model for this turn; unset: Claude's own default. */
+  model?: string;
 }
 
 export interface AgentAdapter {

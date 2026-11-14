@@ -37,6 +37,7 @@ import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
+import { turnModel } from "./models.js";
 import { Pairs, sessionName as pairSession, storePick } from "./pair.js";
 import { AgentStore } from "./agents.js";
 import { deskState, desk2Action } from "./desk2-api.js";
@@ -392,7 +393,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
     if (m.type === "compute_state") return send(await compute.state());
     if (m.type === "compute_run") return send(await compute.run(String(m.id), String(m.action), String(m.param ?? "")));
   }
-  if (await desk2Action(m, { store, pairs, send, cards: askCards, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
+  if (await desk2Action(m, { store, pairs, send, cards: askCards, models: cfg.model, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.
@@ -625,7 +626,7 @@ async function computeTurn(m: any) {
   m.text = `compute[${id === "ask" ? "all" : id}]: ${String(m.text ?? "").trim()}`;
 }
 
-async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: string; noLive?: boolean } = {}) {
+async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: string; noLive?: boolean; scheduled?: boolean; model?: string } = {}) {
   const rec = need(store.get(m.sourceId), "source");
   let th;
   const picked = rec.id === GENERAL_ID && m.threadId !== "ask" ? rec.threads[m.threadId] : undefined;
@@ -692,7 +693,7 @@ async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: str
   try {
     const turn = live
       ? liveClaude.send(live, text, ac.signal)
-      : agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode] });
+      : agent.send(th.session, text, { sourceId: rec.id, threadId: th.id, signal: ac.signal, permissionMode: cfg.permissionMode[rec.id] ?? cfg.permissionMode[th.mode], model: turnModel(cfg.model, { sourceId: rec.id, mode: th.mode, scheduled: opts.scheduled, own: opts.model }) });
     if (live) bus.publish({ sourceId: rec.id, threadId: th.id, event: { kind: "text", text: `_→ your Claude window ${live.paneId} (${live.title || live.sessionId?.slice(0, 8)})_\n\n` } });
     for await (const ev of turn) {
       bus.publish({ sourceId: rec.id, threadId: th.id, event: ev });
@@ -777,7 +778,7 @@ function need<T>(v: T | undefined, what: string): T {
 
 // Scheduled prompts: same path as a browser prompt, but on the desk's own session.
 const scheduler = new Scheduler(cfg.schedules, join(cfg.dataDir, ".index", "schedule-state.json"), (sch) =>
-  runPrompt({ sourceId: sch.source, threadId: "ask", text: sch.prompt }, () => {}, { title: scheduleTitle(sch), noLive: true }));
+  runPrompt({ sourceId: sch.source, threadId: "ask", text: sch.prompt }, () => {}, { title: scheduleTitle(sch), noLive: true, scheduled: true, model: sch.model }));
 await scheduler.start();
 
 for (const host of cfg.network.bind) {

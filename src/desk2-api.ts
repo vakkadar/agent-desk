@@ -16,6 +16,7 @@ import { excludeDesk } from "./relay.js";
 import type { AskCards, CardAnswer } from "./ask-card.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pairModels, type ModelMap } from "./models.js";
 
 export interface Desk2Ctx {
   store: ThreadStore;
@@ -27,6 +28,7 @@ export interface Desk2Ctx {
   applies?: DeskApplies; // Desk perspective (admin only; server gates desk_* types on "self")
   previews?: DeskPreviews;
   cards?: AskCards; // questions agents in pair panes are waiting on
+  models?: ModelMap; // [model] in desk.toml: builder/reviewer models per activity
 }
 
 /** What the Desk perspective shows: apply history (newest first) and running previews. */
@@ -64,7 +66,7 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       const tab = m.threadId && m.threadId !== "ask" ? String(m.threadId) : "lead";
       if (tab !== "lead") need(rec.threads[tab], "thread");
       const dir = tab === "lead" ? rec.location : threadDir(rec, tab);
-      const pair = await c.pairs.open(rec.id, dir, tab);
+      const pair = await c.pairs.open(rec.id, dir, tab, pairModels(c.models ?? {}, rec.id, tab, rec.threads[tab]?.mode));
       await excludeDesk(rec.location); // verdict and relay files stay out of git status
       c.send({ type: "pair", sourceId: rec.id, pair, attach: c.pairs.attachCommand(rec.id) });
       // First Claude run in this folder: it waits on "trust this folder?" until the user says yes.

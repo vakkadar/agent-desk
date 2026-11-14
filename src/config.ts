@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { parse } from "smol-toml";
 import type { CfAccessOpts } from "./net/cfaccess.js";
 import { parseSchedules, type Schedule } from "./schedule.js";
+import { parseModels, type ModelMap } from "./models.js";
 
 export interface DeskConfig {
   dataDir: string;
@@ -31,6 +32,8 @@ export interface DeskConfig {
    * In "auto", Claude decides; only what it would ask about reaches the browser.
    */
   permissionMode: Record<string, string>;
+  /** Claude model per activity or source id ([model] in desk.toml; src/models.ts). */
+  model: ModelMap;
   /** Your own herdr sessions to look in for an open Claude per folder (live_sessions; [] turns it off). */
   liveSessions: string[];
   /** Places Ask can run besides Claude on this host ([[ask_target]]; the older [hub] url still works). */
@@ -58,6 +61,7 @@ export const DEFAULTS: DeskConfig = {
   git: { push: false, remote: "origin" },
   approvalTimeoutMin: { ask: 30, design: 30, code: 30 },
   permissionMode: { general: "auto" },
+  model: {},
   liveSessions: ["default"],
   askTargets: [],
   profiles: { profile: "everyday", guest: "everyday", byEmail: {}, guestAsk: false },
@@ -95,6 +99,7 @@ export async function loadConfig(dataDir = process.env.AGENT_DESK_DATA ?? DEFAUL
     git: { push: raw.git?.push ?? DEFAULTS.git.push, remote: raw.git?.remote ?? DEFAULTS.git.remote },
     approvalTimeoutMin: { ...DEFAULTS.approvalTimeoutMin, ...(raw.approval_timeout_min ?? {}) },
     permissionMode: { ...DEFAULTS.permissionMode, ...(raw.permission_mode ?? {}) },
+    model: parseModels(raw.model),
     liveSessions: raw.live_sessions ?? DEFAULTS.liveSessions,
     askTargets: parseTargets(raw),
     profiles: parseProfiles(raw),

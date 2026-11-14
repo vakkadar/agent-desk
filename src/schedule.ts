@@ -1,6 +1,7 @@
 // Scheduled prompts ([[schedule]] in desk.toml): parse, next-run maths, and a small ticker.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { validModel } from "./models.js";
 
 export interface Schedule {
   name: string;
@@ -9,6 +10,7 @@ export interface Schedule {
   every?: number; // ms between runs
   source: string; // "general" or a project source id
   prompt: string;
+  model?: string; // Claude model for this run; else [model] schedule
 }
 
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -35,6 +37,10 @@ export function parseSchedules(raw: unknown): Schedule[] {
     if (!prompt) throw new Error(`${where}: prompt required`);
     if ((r.at === undefined) === (r.every === undefined)) throw new Error(`${where}: set exactly one of at / every`);
     const s: Schedule = { name, source: String(r.source ?? "general"), prompt };
+    if (r.model !== undefined) {
+      if (!validModel(String(r.model).trim())) throw new Error(`${where}: bad model "${r.model}"`);
+      s.model = String(r.model).trim();
+    }
     if (r.at !== undefined) {
       const m = /^(\d{1,2}):(\d{2})$/.exec(String(r.at));
       if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) throw new Error(`${where}: bad at "${r.at}" (use HH:MM)`);

@@ -9,6 +9,7 @@ at = "07:30"                # daily, local time (HH:MM)
 days = ["mon", "tue", "wed", "thu", "fri"]   # optional; default every day
 source = "general"          # "general" (default) or a project source id
 prompt = "Summarize what changed overnight."
+model = "haiku"             # optional; else [model] schedule, then Claude's default
 
 [[schedule]]
 name = "poll"
@@ -21,6 +22,7 @@ Rules:
 - Same path as a typed prompt, same permission mode (`[permission_mode]`) for that source; approvals show in the browser as usual.
 - General: each run starts a new question titled `⏰ morning · 2026-11-07` (`every` adds the time).
 - Project: runs in the project's `ask` thread on the desk's own session, never your open herdr window.
+- Model: the schedule's own `model`, else `[model]` for its source id, else `[model] schedule` (see docs/models.md).
 - A run is skipped if the previous run of the same schedule is still going.
 - Last run times live in `.index/schedule-state.json`. Slots missed while the desk was down are not caught up.
 - `⋯` menu → Schedules shows next/last run and a "Run now" button (action role only).
