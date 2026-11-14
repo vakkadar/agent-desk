@@ -46,6 +46,7 @@ import { AskCards } from "./ask-card.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
 import { mailText } from "./links.js";
+import { prepareReview } from "./link-review.js";
 import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 import { DeskApplies, linkDeps, serviceRestart } from "./desk-apply.js";
@@ -520,6 +521,12 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
     }
     case "prompt": {
       if (m.sourceId === COMPUTE_ID) await computeTurn(m);
+      // `review: <url>`: fetch the PR / MR / doc behind the link and brief the agent with it (src/link-review.ts).
+      const srec = store.get(String(m.sourceId));
+      if (srec?.kind === "local") {
+        const brief = await prepareReview(srec.location, String(m.text ?? ""));
+        if (brief) m.text = brief;
+      }
       // Snapshot a worktree thread before the turn: the "since my last message" diff base.
       const th = store.get(String(m.sourceId))?.threads[String(m.threadId)];
       if (th?.worktree) { th.lastSnap = await snapshot(th.worktree).catch(() => th.lastSnap); await store.save(store.get(String(m.sourceId))!); }

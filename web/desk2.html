@@ -774,7 +774,7 @@ function palData(q) {
     ["New code thread", "", () => { switchPersp("code"); newThread("code"); }], ["New design thread", "", () => { switchPersp("design"); newThread("design"); }], ["New question (General)", "", () => go("general", null)],
     ["Notes: today", "", () => view("notes")], ["History", "", () => view("history")], ["Usage", "", () => view("usage")], ["Schedules", "", () => act("schedules")],
     ["Add a project (folder or URL)", "", () => view("attach")], ["Terminal", "", () => act("terminalPanel")], ["Sessions (herdr)", "", () => act("sessions")], ["Health", "", () => act("health")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
-    ["Settings: agents (builder, reviewer)", "", () => act("settings")], ["Toggle light / dark", "", theme], ["Appearance: theme, accent, density, layout", "", () => act("look")], ["Toggle list", "Ctrl+B", () => act("toggleLeft")], ["Help: keys, prefixes, perspectives", "?", () => act("help")]];
+    ["Settings: agents (builder, reviewer)", "", () => act("settings")], ["Toggle light / dark", "", theme], ["Appearance: theme, accent, density, layout", "", () => act("look")], ["Toggle list", "Ctrl+B", () => act("toggleLeft")], ["Help: keys, prefixes, perspectives", "?", () => act("help")], ["Review a PR or doc from a link", "", () => { const b = $("#msg"); if (!b) return; b.value = "review: "; b.focus(); }]];
   if (!cmd) for (const p of visiblePlaces()) for (const t of THREADS[p.id] || []) if (!qq || (t.id + " " + t.title + " " + p.name).toLowerCase().includes(qq)) out.push({ k: "thread", label: `${t.id} · ${t.title}`, s: p.name, run: () => go(p.id, t.id) });
   for (const [l, s, fn] of cmds) if (!qq || l.toLowerCase().includes(qq)) out.push({ k: "command", label: l, s, run: fn });
   if (!cmd && qq.length > 2) out.push({ k: "history", label: `Search all turns and transcripts for “${q}”`, s: "History", run: () => { S.q = q; view("history"); } });
@@ -1022,6 +1022,7 @@ render();
 <div class="hrow"><span class="kbd">?</span><span>this help</span></div>
 <h4>Message prefixes</h4>
 <div class="hrow"><code>c: q-3 text</code><span>continue an earlier question or thread (id, session id or words from its first ask)</span></div>
+<div class="hrow"><code>review: &lt;link&gt; what to check</code><span>review a PR / merge request (GitHub, GitLab, Gitea, Forgejo) or a design doc from its link; nothing is posted or changed</span></div>
 <div class="hrow"><code>new: text</code><span>separate session, not the open Claude window</span></div>
 <div class="hrow"><code>@code-2 text</code><span>mail a note to another thread's builder</span></div>
 <div class="hrow"><code>attach: name</code><span>open that herdr session in the terminal</span></div>
