@@ -9,7 +9,8 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { parseVerdict, verdictPath, type Finding, type Verdict } from "./review.js";
+import { parseVerdict, reviewerBrief, verdictPath, type Finding, type Verdict } from "./review.js";
+import { markSkepticSent, readSkeptic, skepticPath, skepticStep } from "./skeptic.js";
 import type { Pairs } from "./pair.js";
 import type { ThreadStore } from "./threads.js";
 
@@ -103,6 +104,17 @@ export class Relay {
     return msgs;
   }
 
+  /** The builder's skeptic pass is done (or timed out): hand the diff to the reviewer. */
+  private async skeptic(sourceId: string, tab: string, verdict: string, base: string): Promise<void> {
+    const path = skepticPath(verdict);
+    const s = await readSkeptic(path);
+    const step = skepticStep(s);
+    if (!step.go) return;
+    await this.pairs.sendTo(sourceId, tab, "reviewer", reviewerBrief(tab, verdict, base, step.note));
+    await markSkepticSent(path, s!);
+    this.log(`[relay] ${sourceId}/${tab} → reviewer: brief after skeptic pass`);
+  }
+
   async tick(): Promise<RelayMsg[]> {
     if (this.busy) return [];
     this.busy = true;
@@ -115,7 +127,11 @@ export class Relay {
           const th = rec.threads[tab];
           if (!th) continue; // "lead" has no verdict
           const path = verdictPath(rec.location, th.id, th.worktree);
-          try { all.push(...await this.one(rec.id, tab, path)); this.errs.delete(path); }
+          try {
+            await this.skeptic(rec.id, tab, path, th.lastSnap ?? th.base ?? "HEAD");
+            all.push(...await this.one(rec.id, tab, path));
+            this.errs.delete(path);
+          }
           catch (e: any) { // not marked seen: retried next tick
             if (this.errs.get(path) !== e.message) this.log(`[relay] ${rec.id}/${tab}: ${e.message}`);
             this.errs.set(path, e.message);

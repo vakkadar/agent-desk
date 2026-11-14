@@ -5,6 +5,7 @@ import type { SourceRec, ThreadStore } from "./threads.js";
 import type { Pairs } from "./pair.js";
 import { changedFiles, fileDiff } from "./worktree.js";
 import { readReview, reviewerBrief, verdictPath } from "./review.js";
+import { askSkeptic, skepticBrief, skepticPath } from "./skeptic.js";
 import type { MergeQueue } from "./merge-queue.js";
 import type { DeskEvent } from "./types.js";
 import { links } from "./links.js";
@@ -120,12 +121,21 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       return true;
     }
     case "pair_review": {
-      // Ask the thread's reviewer pane to (re)review: sends the brief with the verdict file path.
+      // Ask for a (re)review. By default the builder first does a skeptic pass on its own diff; the relay
+      // briefs the reviewer when that is done (src/skeptic.ts). skeptic:false goes straight to the reviewer.
       const rec = need(c.store.get(String(m.sourceId)), "source");
       const th = need(rec.threads[String(m.threadId)], "thread");
       const path = verdictPath(rec.location, th.id, th.worktree);
-      await c.pairs.sendTo(rec.id, th.id, "reviewer", reviewerBrief(th.id, path, th.lastSnap ?? th.base ?? "HEAD"));
-      c.send({ type: "pair_review", sourceId: rec.id, threadId: th.id, path });
+      const base = th.lastSnap ?? th.base ?? "HEAD";
+      const skeptic = m.skeptic !== false;
+      if (skeptic) {
+        const sp = skepticPath(path);
+        await askSkeptic(sp);
+        await c.pairs.sendTo(rec.id, th.id, "builder", skepticBrief(th.id, sp, base));
+      } else {
+        await c.pairs.sendTo(rec.id, th.id, "reviewer", reviewerBrief(th.id, path, base));
+      }
+      c.send({ type: "pair_review", sourceId: rec.id, threadId: th.id, path, skeptic });
       return true;
     }
     case "merge_enqueue": {

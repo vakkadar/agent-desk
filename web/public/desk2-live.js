@@ -158,7 +158,7 @@
     } else if (m.type === "pair_trusted") {
       toast("Folder trusted: Claude is starting");
     } else if (m.type === "pair_review") {
-      toast("Reviewer asked to check the current diff");
+      toast(m.skeptic ? "Builder self-checks first; the reviewer follows" : "Reviewer asked to check the current diff");
     } else if (m.type === "notes") {
       L.notes[m.date] = m.rows; if (S.view === "notes") renderMid();
     } else if (m.type === "usage") {
@@ -297,7 +297,7 @@
     const t = thr(), ids = { sourceId: S.place, threadId: t?.id };
     switch (a) {
       case "stop": return wsSend({ type: "cancel", ...ids });
-      case "reviewNow": return wsSend({ type: "pair_review", ...ids });
+      case "reviewNow": return wsSend({ type: "pair_review", ...ids }); // builder self-checks first (src/skeptic.ts)
       case "merge": return wsSend({ type: "merge_enqueue", ...ids });
       case "terminal": L.wantTerm = S.place; return wsSend({ type: "pair_open", ...ids }); // pair in herdr, shown in the terminal panel
       case "terminalPanel": closeMenu(); return X() ? X().toggleTerminal() : toast("Terminal needs the built desk (npm run build)");

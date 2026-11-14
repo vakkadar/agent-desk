@@ -76,11 +76,12 @@ export async function readReview(location: string, threadId: string, worktree?: 
 }
 
 /** What the reviewer pane is told: review the builder's changes adversarially and keep the verdict file. */
-export function reviewerBrief(threadId: string, path: string, base: string): string {
+export function reviewerBrief(threadId: string, path: string, base: string, note = ""): string {
   return [
     `You are the adversarial reviewer for ${threadId}. Review the builder's changes since ${base.slice(0, 12)} (git diff ${base.slice(0, 12)}).`,
     `Write your verdict to ${path} as JSON: {"round": N, "reviewer": "<you>", "findings": [{"id": "F1", "severity": "high|medium|low", "file": "...", "line": 1, "text": "...", "status": "open"}]}.`,
     `The desk passes your open findings to the builder and tells you when the builder marks one "claimed"; re-check it yourself and only then set "verified".`,
     `If you and the builder disagree after one exchange, set "disputed" with a short "note" for the user. Never edit code yourself.`,
+    ...(note ? [note] : []),
   ].join(" "); // one line: a newline typed into the pane's TUI would submit early
 }
