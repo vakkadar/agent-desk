@@ -139,6 +139,16 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .persp button.on { background: var(--card); color: var(--fg); font-weight: 600; box-shadow: var(--shadow); }
 .persp button .n { font-size: 11px; color: var(--mute); font-weight: 500; }
 .app.p-ask .files, .app.p-ask .sash.h { display: none; }
+.app.p-compute .files, .app.p-compute .sash.h, .app.p-compute .right, .app.p-compute .sash.r { display: none; }
+.cmp { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; overflow: auto; min-height: 0; }
+.cmp .mcard { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.cmp .mh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cmp .mh b { font-size: 15px; }
+.cmp .agrp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cmp .agrp > .lbl { font-size: 11.5px; color: var(--mute); width: 52px; flex: none; text-transform: uppercase; letter-spacing: .04em; }
+.cmp .btn.armed { background: var(--red, #c0392b); color: #fff; border-color: transparent; }
+.cmp pre { margin: 0; max-height: 360px; overflow: auto; font-size: 12px; background: var(--sunk); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; }
+.cmp .note { font-size: 12.5px; color: var(--amber, #b7791f); }
 .app.p-design .right { --rw-default: 60%; }
 .need { position: relative; }
 .need b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--amber); color: #fff; font-size: 11px; display: grid; place-items: center; padding: 0 4px; }
@@ -353,6 +363,49 @@ const THREADS = {
   sanatana: [{ id: "code-1", title: "Hub /api/ask streaming", state: "idle", age: "3d", kind: "code", ctx: 22, tok: "77k" }],
   "desk-dev": [{ id: "code-1", title: "Restart gate after tests", state: "working", age: "now", kind: "code", desk: true, ctx: 18, tok: "28k" }, { id: "code-2", title: "Desk perspective in desk2", state: "done", age: "1h", kind: "code", desk: true, ctx: 31, tok: "54k" }],
 };
+// Compute perspective: machines and hosting accounts (live: compute_state from <data>/compute.toml).
+const COMPUTE = { sel: "hp", out: {}, arm: null, error: "", machines: [
+  { id: "hp", label: "HP desktop", group: "Home", os: "linux", online: true, ip: "100.99.174.32", power: "on", actions: [{ id: "ha:on", label: "Power on", group: "power" }, { id: "ha:off", label: "Power off", group: "power", confirm: true }, { id: "ssh:uptime", label: "Uptime", group: "ssh" }, { id: "ssh:disk", label: "Disk", group: "ssh" }, { id: "ssh:reboot", label: "Reboot", group: "ssh", confirm: true }] },
+  { id: "imac-linux", label: "iMac · Linux", group: "iMac", os: "linux", online: false, lastSeen: "62d", actions: [{ id: "wol", label: "Wake (LAN)", group: "power" }, { id: "ssh:uptime", label: "Uptime", group: "ssh" }, { id: "cmd:0", label: "Boot macOS next", group: "ssh", confirm: true }] },
+  { id: "imac-mac", label: "iMac · macOS", group: "iMac", os: "macos", note: "imac-mac is not on the tailnet", actions: [{ id: "ssh:uptime", label: "Uptime", group: "ssh" }] },
+  { id: "windows", label: "Windows PC", group: "Home", os: "windows", online: false, lastSeen: "19d", actions: [{ id: "wol", label: "Wake (LAN)", group: "power" }, { id: "ssh:uptime", label: "Uptime", group: "ssh" }, { id: "ssh:reboot", label: "Reboot", group: "ssh", confirm: true }] },
+  { id: "sanatana-gateway", label: "sanatana-gateway", group: "Home", os: "linux", online: false, lastSeen: "19d", actions: [{ id: "ssh:uptime", label: "Uptime", group: "ssh" }, { id: "ssh:reboot", label: "Reboot", group: "ssh", confirm: true }] },
+  { id: "iphone", label: "iPhone", group: "Devices", os: "ios", online: true, ip: "100.64.62.92", actions: [] },
+  { id: "hostinger", label: "Hostinger VPS", group: "Cloud", os: "vps", online: true, power: "running", actions: [{ id: "vps:start", label: "Start VPS", group: "power" }, { id: "vps:restart", label: "Restart VPS", group: "power", confirm: true }, { id: "vps:stop", label: "Stop VPS", group: "power", confirm: true }, { id: "hostinger:vm", label: "This VPS", group: "api" }, { id: "hostinger:metrics", label: "Metrics (24 h)", group: "api" }, { id: "hostinger:dns", label: "DNS zone", group: "api", param: "domain" }] },
+  { id: "godaddy", label: "GoDaddy", group: "Cloud", os: "domains", actions: [{ id: "godaddy:domains", label: "Domains", group: "api" }, { id: "godaddy:dns", label: "DNS records", group: "api", param: "domain" }] },
+] };
+const OS_ICON = { linux: "🐧", macos: "", windows: "⊞", ios: "📱", vps: "☁", domains: "🌐" };
+function machineDot(m) { return m.online ? "var(--ok)" : m.online === false ? "var(--mute)" : m.power === "running" || m.power === "on" ? "var(--ok)" : "var(--line2)"; }
+function computeTree() {
+  let h = "", g = null;
+  if (COMPUTE.error) h += `<div class="mute" style="padding:6px 14px;font-size:12.5px">${esc(COMPUTE.error)}</div>`;
+  if (!COMPUTE.machines.length && !COMPUTE.error) h += `<div class="mute" style="padding:6px 14px;font-size:12.5px">No machines yet: add [[machine]] entries to compute.toml in the desk's data folder.</div>`;
+  for (const m of [...COMPUTE.machines].sort((a, b) => (a.group ?? "~").localeCompare(b.group ?? "~"))) {
+    if ((m.group ?? "Other") !== g) { g = m.group ?? "Other"; h += `<div class="grp">${esc(g)}</div>`; }
+    h += `<button class="row ${COMPUTE.sel === m.id ? "on" : ""}" data-mach="${esc(m.id)}"><span class="dot" style="background:${machineDot(m)}"></span><span class="t">${esc(m.label)}</span><span class="m">${m.online ? "online" : m.lastSeen ? esc(m.lastSeen) : m.power ? esc(m.power) : ""}</span></button>`;
+  }
+  return h;
+}
+function computePanel() {
+  const m = COMPUTE.machines.find((x) => x.id === COMPUTE.sel) ?? COMPUTE.machines[0];
+  const head = `<div class="tline"><b>Compute</b><span class="meta">· ${COMPUTE.machines.length} machines and accounts</span><span class="sp"></span><button class="btn sm" data-act="computeRefresh" title="Tailnet, Home Assistant and Hostinger state">Refresh</button></div>`;
+  if (!m) return head + `<div class="cmp"><div class="mcard"><div class="mute">Machines come from <code>compute.toml</code> in the desk's data folder; tokens from <code>~/.config/agent-desk/secrets.toml</code> (chmod 600). See docs/compute.md.</div></div></div>`;
+  const grp = (k, label) => { const as = m.actions.filter((a) => a.group === k); return as.length ? `<div class="agrp"><span class="lbl">${label}</span>${as.map((a) => `<button class="btn sm ${COMPUTE.arm === m.id + "|" + a.id ? "armed" : ""}" data-cact="${esc(a.id)}" ${a.param ? `data-cparam="${esc(a.param)}"` : ""} title="${a.confirm ? "Asks twice" : ""}">${COMPUTE.arm === m.id + "|" + a.id ? `Really ${esc(a.label.toLowerCase())}?` : esc(a.label)}${a.param ? " …" : ""}</button>`).join("")}</div>` : ""; };
+  const outs = (COMPUTE.out[m.id] || []).map((o) => `<details class="fold" open><summary><span class="dot" style="background:${o.ok ? "var(--ok)" : "var(--red, #c0392b)"}"></span>${esc(o.label)} <span class="mute mono">${esc(String(o.at).slice(11, 19))}</span></summary><pre>${esc(o.out)}</pre></details>`).join("");
+  const facts = [m.online != null ? (m.online ? "online" : `offline${m.lastSeen ? ", last seen " + esc(m.lastSeen) : ""}`) : "", m.ip ? `<span class="mono">${esc(m.ip)}</span>` : "", m.power ? `power: <b>${esc(m.power)}</b>` : ""].filter(Boolean).join(" · ");
+  return head + `<div class="cmp"><div class="mcard"><div class="mh"><span>${OS_ICON[m.os] ?? ""}</span><b>${esc(m.label)}</b><span class="pill p-mute">${esc(m.os)}</span><span class="mute">${facts}</span></div>
+    ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}
+    ${grp("power", "Power")}${grp("ssh", "SSH")}${grp("api", "API")}
+    ${m.actions.some((a) => a.param) ? `<div class="agrp"><span class="lbl"></span><input id="cparamIn" class="inp mono" style="max-width:260px;height:30px" placeholder="domain, e.g. sanatanadharma.cloud" value="${esc(COMPUTE.param ?? "")}" oninput="COMPUTE.param=this.value"></div>` : ""}
+    ${!m.actions.length ? `<div class="mute" style="font-size:12.5px">${m.os === "ios" ? "Status only: an iPhone can't be switched on or off from here." : "No actions: add ssh, ha_power, wake_mac, hostinger_vm or godaddy in compute.toml."}</div>` : ""}</div>${outs}</div>`;
+}
+// Demo answer; desk2-live.js replaces it with compute_run over /ws.
+function computeRun(id, action, param) {
+  const a = COMPUTE.machines.find((x) => x.id === id)?.actions.find((x) => x.id === action);
+  (COMPUTE.out[id] ||= []).unshift({ label: a?.label ?? action, ok: true, at: new Date().toISOString(), out: `(demo) ${action}${param ? " " + param : ""}` });
+  renderMid();
+}
+function computeRefresh() { toast("Refresh (live desk only)"); }
 // Desk perspective: what the running desk is built from, and running previews (live: from the server).
 const DESK = {
   applies: [
@@ -399,10 +452,10 @@ const LEVELS = { everyday: "Everyday", developer: "Developer", power: "Power dev
 // ================= state =================
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem("d2." + k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem("d2." + k, JSON.stringify(v)); } catch {} };
-const PERSP = { ask: { label: "Ask", key: "1" }, design: { label: "Design", key: "2" }, code: { label: "Code", key: "3" }, desk: { label: "Desk", key: "4", self: true } };
+const PERSP = { ask: { label: "Ask", key: "1" }, design: { label: "Design", key: "2" }, code: { label: "Code", key: "3" }, desk: { label: "Desk", key: "4", self: true }, compute: { label: "Compute", key: "5", compute: true } };
 // Desk = code threads on the desk's own repo: same worktree/review/merge, plus build, apply, roll back.
 const kindOf = (t) => (t.desk ? "desk" : !t.kind || t.kind === "ask" ? "ask" : t.kind);
-const S = Object.assign({ persp: "code", layouts: {}, level: "power", deskDev: true, place: "agent-desk", thread: "code-3", left: true, file: null, fileMode: "diff", diffBase: "branch", filesMin: false, closed: {}, target: "This desk", builderModel: "Sonnet 5.5", reviewModel: "Opus 5.5", lw: 272, rw: 540, fh: 260 }, load("s", {}));
+const S = Object.assign({ persp: "code", layouts: {}, level: "power", deskDev: true, compute: true, place: "agent-desk", thread: "code-3", left: true, file: null, fileMode: "diff", diffBase: "branch", filesMin: false, closed: {}, target: "This desk", builderModel: "Sonnet 5.5", reviewModel: "Opus 5.5", lw: 272, rw: 540, fh: 260 }, load("s", {}));
 S.dispute = null; S.view = "thread";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -417,6 +470,7 @@ const visiblePlaces = () => PLACES.filter((p) => (p.kind === "general" || dv()) 
 
 // ================= left =================
 function renderTree() {
+  if (S.persp === "compute") { $("tree").innerHTML = computeTree(); return; }
   let h = "";
   if (NEEDS.length) h += `<div class="grp">Needs you <span class="pill p-amber">${NEEDS.length}</span></div>` +
     NEEDS.map((n) => `<button class="row need-row" data-go="${n.place}|${n.thread}"><span class="dot s-blocked"></span><span class="t"><span class="mono" style="font-weight:600">${n.thread}</span> ${esc(n.text)}</span></button>`).join("");
@@ -553,7 +607,7 @@ function renderUsage() {
 function renderMid() {
   const t = thr();
   const v = VIEWS[S.view];
-  $("mid").innerHTML = v ? v() : tline(t) + (S.persp === "desk" && place()?.deskdev ? deskPanel(t) : "") + composer(t) + out(t);
+  $("mid").innerHTML = v ? v() : S.persp === "compute" ? computePanel() : tline(t) + (S.persp === "desk" && place()?.deskdev ? deskPanel(t) : "") + composer(t) + out(t);
   const ta = $("msg");
   if (ta) {
     ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
@@ -601,7 +655,7 @@ function palData(q) {
   const out = [], ql = q.toLowerCase().trim();
   if (ql.startsWith("?")) { const w = q.slice(1).trim(); return [{ k: "web", label: /^https?:\/\//.test(w) ? `Open ${w}` : `Search the web for “${w}”`, s: "new tab", run: () => { pal(false); open(/^https?:\/\//.test(w) ? w : "https://www.google.com/search?q=" + encodeURIComponent(w), "_blank", "noopener"); } }]; }
   const cmd = ql.startsWith(">"), qq = cmd ? ql.slice(1).trim() : ql;
-  const cmds = [["Ask perspective", "Alt+1", () => switchPersp("ask")], ["Design perspective", "Alt+2", () => switchPersp("design")], ["Code perspective", "Alt+3", () => switchPersp("code")], ...(S.deskDev ? [["Desk perspective", "Alt+4", () => switchPersp("desk")]] : []),
+  const cmds = [["Ask perspective", "Alt+1", () => switchPersp("ask")], ["Design perspective", "Alt+2", () => switchPersp("design")], ["Code perspective", "Alt+3", () => switchPersp("code")], ...(S.deskDev ? [["Desk perspective", "Alt+4", () => switchPersp("desk")]] : []), ...(S.compute ? [["Compute perspective", "Alt+5", () => switchPersp("compute")]] : []),
     ["New code thread", "", () => { switchPersp("code"); newThread("code"); }], ["New design thread", "", () => { switchPersp("design"); newThread("design"); }], ["New question (General)", "", () => go("general", null)],
     ["Notes: today", "", () => view("notes")], ["History", "", () => view("history")], ["Usage", "", () => view("usage")], ["Schedules", "", () => act("schedules")],
     ["Add a project (folder or URL)", "", () => view("attach")], ["Terminal", "", () => act("terminalPanel")], ["Sessions (herdr)", "", () => act("sessions")], ["Health", "", () => act("health")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
@@ -655,7 +709,8 @@ function renderPersp() {
   const count = (k) => Object.values(THREADS).flat().filter((t) => kindOf(t) === k && t.state !== "idle" && t.state !== "done").length;
   const deskOn = S.deskDev && PLACES.some((p) => p.deskdev); // admin, and the desk's own repo is a project here
   if (S.persp === "desk" && !deskOn) S.persp = "code";
-  $("persp").innerHTML = Object.entries(PERSP).filter(([, v]) => !v.self || deskOn).map(([k, v]) => `<button role="tab" class="${S.persp === k ? "on" : ""}" data-persp="${k}" title="${v.label} perspective (Alt+${v.key})">${v.label}${count(k) ? `<span class="n">${count(k)}</span>` : ""}</button>`).join("");
+  if (S.persp === "compute" && !S.compute) S.persp = "code";
+  $("persp").innerHTML = Object.entries(PERSP).filter(([, v]) => (!v.self || deskOn) && (!v.compute || S.compute)).map(([k, v]) => `<button role="tab" class="${S.persp === k ? "on" : ""}" data-persp="${k}" title="${v.label} perspective (Alt+${v.key})">${v.label}${count(k) ? `<span class="n">${count(k)}</span>` : ""}</button>`).join("");
 }
 function switchPersp(k, keepTarget) {
   if (k === S.persp) return;
@@ -670,6 +725,7 @@ function switchPersp(k, keepTarget) {
   }
   S.view = "thread"; S.dispute = null;
   if (k === "design" && !S.file) autoPreview();
+  if (k === "compute") computeRefresh();
   render();
 }
 // Design perspective opens the thread's main design output as a preview straight away.
@@ -701,6 +757,7 @@ function act(a, el) {
     case "filesMin": S.filesMin = !S.filesMin; return renderFiles();
     case "closeFile": S.file = null; renderFiles(); return renderRight();
     case "closeView": S.view = "thread"; return render();
+    case "computeRefresh": return computeRefresh();
     case "needs": { const n = NEEDS[0]; return go(n.place, n.thread); }
     case "theme": closeMenu(); return theme();
     case "classic": location.href = "/index.html" + location.hash; return;
@@ -717,7 +774,7 @@ function layout() {
   const app = $("app");
   app.classList.toggle("no-left", !S.left && !phone());
   app.style.setProperty("--lw", S.lw + "px"); app.style.setProperty("--rw", S.rw + "px"); $("left").style.setProperty("--fh", S.fh + "px");
-  ["ask", "design", "code", "desk"].forEach((k) => app.classList.toggle("p-" + k, S.persp === k));
+  ["ask", "design", "code", "desk", "compute"].forEach((k) => app.classList.toggle("p-" + k, S.persp === k));
   document.body.className = "lv-" + S.level + ($("app").classList.contains("thread-open") ? " thread-open" : "");
   $("needN").textContent = NEEDS.length; $("needN").style.display = NEEDS.length ? "" : "none";
   persist();
@@ -735,6 +792,17 @@ document.addEventListener("click", (e) => {
   if (el.id === "backBtn") { if (S.file) { S.file = null; renderFiles(); return renderRight(); } openThreadScreen(false); return; }
   if (d.menu) return $("menu").classList.contains("on") ? closeMenu() : menu(d.menu, el);
   if (d.persp) return switchPersp(d.persp);
+  if (d.mach) { COMPUTE.sel = d.mach; COMPUTE.arm = null; if (phone()) openThreadScreen(true); renderTree(); return renderMid(); }
+  if (d.cact) {
+    const m = COMPUTE.machines.find((x) => x.id === COMPUTE.sel), a = m?.actions.find((x) => x.id === d.cact);
+    if (!a) return;
+    const param = a.param ? ($("cparamIn")?.value.trim() ?? "") : "";
+    if (a.param && !param) { $("cparamIn")?.focus(); return toast(`Type a ${a.param} first`); }
+    const key = m.id + "|" + a.id;
+    if (a.confirm && COMPUTE.arm !== key) { COMPUTE.arm = key; clearTimeout(COMPUTE.armT); COMPUTE.armT = setTimeout(() => { COMPUTE.arm = null; renderMid(); }, 4000); return renderMid(); }
+    COMPUTE.arm = null; toast(`${a.label}: ${m.label}…`);
+    return computeRun(m.id, a.id, param);
+  }
   if (d.go) { const [p, t] = d.go.split("|"); return go(p, t); }
   if (d.tg) { S.closed[d.tg] = !S.closed[d.tg]; return renderTree(); }
   if (d.new) { return go(d.new, null); }
@@ -765,7 +833,7 @@ $("palIn").addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   const c = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (c && k === "k") { e.preventDefault(); pal(!$("pal").classList.contains("on")); }
-  else if (e.altKey && ["1", "2", "3", "4"].includes(e.key) && dv() && (e.key !== "4" || S.deskDev)) { e.preventDefault(); switchPersp({ 1: "ask", 2: "design", 3: "code", 4: "desk" }[e.key]); }
+  else if (e.altKey && ["1", "2", "3", "4", "5"].includes(e.key) && dv() && (e.key !== "4" || S.deskDev) && (e.key !== "5" || S.compute)) { e.preventDefault(); switchPersp({ 1: "ask", 2: "design", 3: "code", 4: "desk", 5: "compute" }[e.key]); }
   else if (c && k === "b") { e.preventDefault(); act("toggleLeft"); }
   else if (e.key === "Escape") { pal(false); closeMenu(); if (S.file) { S.file = null; renderFiles(); renderRight(); } }
   else if (e.key === "/" && !e.target.closest("textarea, input")) { e.preventDefault(); $("msg")?.focus(); }

@@ -101,6 +101,9 @@
       if (L.features.includes("code")) wsSend({ type: "merge_list" });
       S.deskDev = L.features.includes("self"); // the server decides who sees the desk's own code
       if (S.deskDev) wsSend({ type: "desk_state" }); else { DESK.applies = []; DESK.previews = []; }
+      S.compute = L.features.includes("compute") && m.role === "action"; // admin with the desk token
+      COMPUTE.machines = []; COMPUTE.out = {}; COMPUTE.error = "";
+      if (S.compute) wsSend({ type: "compute_state" });
       refreshThread();
       if (L.prefill) { const ta = $("msg"); if (ta) { ta.value = L.prefill.text; ta.focus(); } L.prefill = false; }
       openHash(location.hash);
@@ -152,6 +155,16 @@
       else if ($("attLoc")?.value === m.path) $("attLocs").innerHTML = m.entries.map((v) => `<option value="${esc(v)}">`).join("");
     } else if (m.type === "sessions") {
       if (m.sourceId === S.place) { L.claude = m.sessions; if (S.view === "resume") renderMid(); }
+    } else if (m.type === "compute") {
+      COMPUTE.machines = m.machines; COMPUTE.error = m.error ?? "";
+      if (!m.machines.some((x) => x.id === COMPUTE.sel)) COMPUTE.sel = m.machines[0]?.id ?? null;
+      if (S.persp === "compute") { renderTree(); renderMid(); }
+      renderPersp();
+    } else if (m.type === "compute_out") {
+      (COMPUTE.out[m.id] ||= []).unshift(m); COMPUTE.out[m.id].length = Math.min(COMPUTE.out[m.id].length, 6);
+      toast(`${m.label}: ${m.ok ? "done" : "failed"}`);
+      if (S.persp === "compute") renderMid();
+      if (m.ok && /^(ha|vps|wol)/.test(m.action)) setTimeout(() => wsSend({ type: "compute_state" }), 5000); // power changed: look again
     } else if (m.type === "desk") {
       DESK.applies = m.applies; DESK.previews = m.previews;
       if (S.persp === "desk") renderMid();
@@ -350,6 +363,10 @@
   const demoViews = { notes: renderNotes, usage: renderUsage, history: renderHistory, resume: renderResume };
   renderNotes = () => (L.on ? liveNotes() : demoViews.notes());
   renderUsage = () => (L.on ? liveUsage() : demoViews.usage());
+  const demoCompute = { run: computeRun, refresh: computeRefresh };
+  computeRun = (id, action, param) => (L.on ? wsSend({ type: "compute_run", id, action, param }) : demoCompute.run(id, action, param));
+  computeRefresh = () => (L.on ? wsSend({ type: "compute_state" }) : demoCompute.refresh());
+  setInterval(() => { if (L.on && S.compute && S.persp === "compute" && !document.hidden) wsSend({ type: "compute_state" }); }, 30_000);
   renderHistory = () => (L.on ? liveHistory() : demoViews.history());
   renderResume = () => (L.on ? liveResume() : demoViews.resume());
 

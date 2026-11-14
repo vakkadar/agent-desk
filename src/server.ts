@@ -45,6 +45,7 @@ import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.j
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 import { DeskApplies, linkDeps, systemdRestart } from "./desk-apply.js";
 import { DeskPreviews } from "./desk-preview.js";
+import { Compute } from "./compute.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -267,6 +268,8 @@ const broadcastDesk = () => { for (const [s, f] of helloed) if (seesSelf(f)) s(d
 const applies = new DeskApplies(cfg.dataDir, DESK_REPO, { restart: systemdRestart(`http://${healthHost}:${cfg.port}/healthz`), onChange: () => broadcastDesk() });
 applies.resume();
 const previews = new DeskPreviews(cfg.dataDir, DESK_REPO, cfg.port + 100, () => broadcastDesk());
+// Compute perspective: machines in <data>/compute.toml, secrets in ~/.config/agent-desk/secrets.toml.
+const compute = new Compute(cfg.dataDir);
 const mergeQueue = new MergeQueue(cfg.dataDir, {
   onMerged: (it) => { if (isSelfSource(store.get(it.sourceId)) && it.commit) applies.apply({ commit: it.commit, threadId: it.threadId }).catch((e) => console.error("desk apply:", e)); },
   review: async (it) => { const rec = store.get(it.sourceId); return readReview(rec?.location ?? it.repo, it.threadId, it.worktree); },
@@ -357,6 +360,11 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (m.type === "mail" || m.type === "links") needFeature(features, "design");
   if (/^(pair|merge)_|^files$|^file_diff$|^review$/.test(String(m.type))) needFeature(features, "code");
   if (String(m.type).startsWith("desk_")) needFeature(features, "self");
+  if (String(m.type).startsWith("compute")) {
+    needFeature(features, "compute");
+    if (m.type === "compute_state") return send(await compute.state());
+    if (m.type === "compute_run") return send(await compute.run(String(m.id), String(m.action), String(m.param ?? "")));
+  }
   if (await desk2Action(m, { store, pairs, send, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
