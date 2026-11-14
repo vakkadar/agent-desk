@@ -8,6 +8,7 @@ import { initSchedules, renderSchedules, showSchedules } from "./schedule";
 import { attachByName, initHSessions, onHSessionError, onTrustNeeded, pinFor, renderHSessions, showHSessions } from "./hsessions";
 import { initTargets, isBrowserTarget, onTargetGo, onTargetModels, setTargets, targetChoice } from "./targets";
 import { splitAttached, takePrefill } from "./attach";
+import { initAgents, renderAgents, showAgents } from "./agents";
 import "./health"; // binds #healthBtn and the #health dialog
 
 let send: (m: unknown) => void = () => {};
@@ -20,6 +21,7 @@ initTargets((m) => send(m), runOn);
 const runOnBar = runOn.querySelector("#runOn")!; // kept: renders replace the composer around it
 initSchedules((m) => send(m), () => canAct());
 initHSessions((m) => send(m), () => canAct());
+initAgents((m) => send(m), () => canAct());
 void initPush(pushBtn, (m) => send(m), (hash) => { location.hash = hash; });
 
 const extras = {
@@ -37,12 +39,13 @@ const extras = {
       case "push_key": void onPushKey(m.key); return true;
       case "schedules": renderSchedules(m.rows); return true;
       case "hsessions": renderHSessions(m.rows); return true;
+      case "agents": renderAgents(m); return true;
       case "hsession_trust": onTrustNeeded(m.name, m.dir); return true;
       case "error": return onHSessionError(m.error);
     }
     return false;
   },
-  openTerminal, toggleTerminal, togglePush, showSchedules, showHSessions, pinFor, targetChoice, isBrowserTarget, attachByName, takePrefill, splitAttached,
+  openTerminal, toggleTerminal, togglePush, showSchedules, showAgents, showHSessions, pinFor, targetChoice, isBrowserTarget, attachByName, takePrefill, splitAttached,
   health: () => document.querySelector<HTMLButtonElement>("#healthBtn")!.click(),
   pushLabel: () => pushBtn.textContent ?? "",
   /** Put the "Run on" bar into the General composer (it is re-rendered often; the bar is kept). */

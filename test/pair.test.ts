@@ -46,16 +46,29 @@ test("session name per project, herdr-safe", () => {
   assert.match(sessionName("a b/c"), /^[A-Za-z0-9._-]+$/);
 });
 
-test("reviewer is Codex only when installed, else Claude on the reviewer model", () => {
-  assert.equal(commands("codex", { builder: "sonnet", reviewer: "opus" }).reviewer, "codex");
-  assert.deepEqual(commands("claude", { builder: "sonnet", reviewer: "opus" }), { builder: "claude --model sonnet", reviewer: "claude --model opus" });
+const cc = () => ({ builder: "claude" as const, reviewer: "claude" as const, paths: {} });
+const cx = () => ({ builder: "claude" as const, reviewer: "codex" as const, paths: {} });
+
+test("commands: Claude gets its model, Codex and opencode run plain (full path when known)", () => {
+  const m = { builder: "sonnet", reviewer: "opus" };
+  assert.equal(commands("claude", "codex", m).reviewer, "codex");
+  assert.deepEqual(commands("claude", "claude", m), { builder: "claude --model sonnet", reviewer: "claude --model opus" });
+  assert.deepEqual(commands("opencode", "claude", m, { opencode: "/h/.opencode/bin/opencode" }), { builder: "/h/.opencode/bin/opencode", reviewer: "claude --model opus" });
+});
+
+test("open: the pair runs the agents picked in Settings; the record keeps them", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, () => ({ builder: "claude", reviewer: "opencode", paths: { opencode: "/o/opencode" } }));
+  const r = await p.open("s", "/x");
+  assert.deepEqual([r.builderAgent, r.reviewerAgent], ["claude", "opencode"]);
+  assert.deepEqual(f.runs, [["w1:p1", "claude --model sonnet"], ["w1:p2", "/o/opencode"]]);
 });
 
 test("open: lead tab split builder | reviewer, both agents started; reopen reuses panes", async () => {
   const f = fakeHerdr();
-  const p = new Pairs(dir(), f.h, noServer, () => false);
+  const p = new Pairs(dir(), f.h, noServer, cc);
   const r = await p.open("agent-desk", "/x");
-  assert.deepEqual(r.tabs.lead, { tab: "w1:t1", builder: "w1:p1", reviewer: "w1:p2" });
+  assert.deepEqual(r.tabs.lead, { tab: "w1:t1", builder: "w1:p1", reviewer: "w1:p2", builderAgent: "claude", reviewerAgent: "claude" });
   assert.equal(r.reviewerAgent, "claude");
   assert.deepEqual(f.runs, [["w1:p1", "claude --model sonnet"], ["w1:p2", "claude --model opus"]]);
   assert.equal(f.tabs[0].label, "lead");
@@ -65,7 +78,7 @@ test("open: lead tab split builder | reviewer, both agents started; reopen reuse
 
 test("thread tab: its own builder | reviewer; closeTab forgets it", async () => {
   const f = fakeHerdr();
-  const p = new Pairs(dir(), f.h, noServer, () => true);
+  const p = new Pairs(dir(), f.h, noServer, cx);
   await p.open("agent-desk", "/x");
   const r = await p.open("agent-desk", "/x/wt", "code-1");
   assert.equal(r.tabs["code-1"].tab, "w1:t2");
@@ -76,7 +89,7 @@ test("thread tab: its own builder | reviewer; closeTab forgets it", async () => 
 
 test("reviewer pane died: re-split, builder not relaunched", async () => {
   const f = fakeHerdr();
-  const p = new Pairs(dir(), f.h, noServer, () => false);
+  const p = new Pairs(dir(), f.h, noServer, cc);
   await p.open("s", "/x");
   await p.open("s", "/x", "code-1");
   f.panes.delete("w1:p4");
@@ -89,7 +102,7 @@ test("reviewer pane died: re-split, builder not relaunched", async () => {
 
 test("sendTo types into the chosen pane, then Enter; unknown tab refused", async () => {
   const f = fakeHerdr();
-  const p = new Pairs(dir(), f.h, noServer, () => false);
+  const p = new Pairs(dir(), f.h, noServer, cc);
   await p.open("s", "/x", "code-1");
   await p.sendTo("s", "code-1", "reviewer", "review please");
   assert.deepEqual(f.runs.slice(-2), [[p.get("s")!.tabs["code-1"].reviewer, "send-text:review please"], [p.get("s")!.tabs["code-1"].reviewer, "send-keys:enter"]]);

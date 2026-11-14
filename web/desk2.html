@@ -116,6 +116,7 @@ dialog.dlg button { border: 1px solid var(--line2); background: var(--card); bor
 dialog.dlg .srow, dialog.dlg .hrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
 dialog.dlg .srow span { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 dialog.dlg small, dialog.dlg .hname { color: var(--mute); }
+dialog.dlg select { border: 1px solid var(--line2); border-radius: 6px; background: var(--card); height: 30px; min-width: 10em; }
 dialog.dlg .hname { width: 110px; flex: none; } dialog.dlg .hdet { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 dialog.dlg .hdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--mute); }
 dialog.dlg .hdot.ok { background: var(--ok); } dialog.dlg .hdot.warn { background: var(--amber); } dialog.dlg .hdot.fail { background: var(--warn); }
@@ -682,7 +683,7 @@ function palData(q) {
     ["New code thread", "", () => { switchPersp("code"); newThread("code"); }], ["New design thread", "", () => { switchPersp("design"); newThread("design"); }], ["New question (General)", "", () => go("general", null)],
     ["Notes: today", "", () => view("notes")], ["History", "", () => view("history")], ["Usage", "", () => view("usage")], ["Schedules", "", () => act("schedules")],
     ["Add a project (folder or URL)", "", () => view("attach")], ["Terminal", "", () => act("terminalPanel")], ["Sessions (herdr)", "", () => act("sessions")], ["Health", "", () => act("health")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
-    ["Settings (folder backed up to GitHub)", "", () => toast("Opens settings")], ["Toggle light / dark", "", theme], ["Toggle list", "Ctrl+B", () => act("toggleLeft")]];
+    ["Settings: agents (builder, reviewer)", "", () => act("settings")], ["Toggle light / dark", "", theme], ["Toggle list", "Ctrl+B", () => act("toggleLeft")]];
   if (!cmd) for (const p of visiblePlaces()) for (const t of THREADS[p.id] || []) if (!qq || (t.id + " " + t.title + " " + p.name).toLowerCase().includes(qq)) out.push({ k: "thread", label: `${t.id} · ${t.title}`, s: p.name, run: () => go(p.id, t.id) });
   for (const [l, s, fn] of cmds) if (!qq || l.toLowerCase().includes(qq)) out.push({ k: "command", label: l, s, run: fn });
   if (!cmd && qq.length > 2) out.push({ k: "history", label: `Search all turns and transcripts for “${q}”`, s: "History", run: () => { S.q = q; view("history"); } });
@@ -707,7 +708,7 @@ function menu(kind, anchor) {
     const fs = (t && FILES[t.id]) || [];
     h = (phone() && fs.length ? `<div class="h">Files</div>` + fs.map((f) => it(f.path.split("/").pop(), `${f.path} · +${f.a}${f.d ? " −" + f.d : ""}`, `data-file="${esc(f.path)}"`)).join("") : "") +
       `<div class="h">Thread</div>` + it("Close / reopen", "fold away; nothing is deleted", 'data-act="close"') + (t?.kind && t.kind !== "ask" ? it("Open in herdr-app", "builder | reviewer panes", 'data-act="terminal"') + it("Commit and merge", "queued merge into main", 'data-act="merge"') : "") +
-      `<div class="h pow">Pair</div><div class="pow">${it("Builder: Claude Code · " + S.builderModel, "change agent or model", 'data-act="pair"')}${it("Reviewer: Claude Code · " + S.reviewModel, "Codex only if installed", 'data-act="pair"')}</div>` +
+      `<div class="h pow">Pair</div><div class="pow">${it("Builder and reviewer agents", "Claude Code, Codex or opencode — Settings", 'data-act="pair"')}</div>` +
       `<div class="h dev">Project</div><div class="dev">${place().kind === "project" && place().src?.kind !== "url" ? it("Resume a Claude session", "one started in a terminal, in this folder", 'data-act="resume"') : ""}${it("Machine: " + place().machine, "move: save → kill → move → copy → start", 'data-act="move"')}${it("Project settings", "repo, context files, supporting-file rule", 'data-act="psettings"')}</div>` +
       (place().deskdev ? `<div class="h">Desk dev</div>` + it("Restart desk", "after tests pass and you approve", 'data-act="restart"') + it("Roll back last commit", "on main", 'data-act="rollback"') : "");
   } else if (kind === "me") {
@@ -889,6 +890,7 @@ render();
 </div>
 <dialog id="health" class="dlg"><div class="hhead"><b>Health</b><button type="button" id="healthClose">Close</button></div><div id="healthBody"></div></dialog>
 <dialog id="hsessions" class="dlg"><div class="hhead"><b>Sessions</b><button type="button" id="hsClose">Close</button></div><div id="hsBody"></div><form id="hsPin" hidden><label></label><div class="row"><input type="password" class="inp" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Session PIN" /><button>OK</button></div></form></dialog>
+<dialog id="agents" class="dlg"><div class="hhead"><b>Settings · Agents</b><button type="button" id="agentsClose">Close</button></div><div id="agentsBody"></div></dialog>
 <dialog id="schedules" class="dlg"><div class="hhead"><b>Schedules</b><button type="button" id="schedClose">Close</button></div><div id="schedBody"></div></dialog>
 <script type="module" src="./desk2-extras.ts"></script>
 <script src="/desk2-live.js"></script>

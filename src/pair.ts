@@ -6,12 +6,14 @@
 //       tab        lead                  builder pane | reviewer pane   (project leads)
 //       tab        code-1                builder pane | reviewer pane   (one per thread)
 //
-// Builder: Claude. Reviewer: Codex when installed on this machine, else Claude on a stronger model.
+// Builder and reviewer agents come from Settings (src/agents.ts: Claude Code, Codex, opencode),
+// picked when a project's pair is first opened; Claude runs with a model, the others with their own config.
 // Pane ids are kept in <data>/.index/pairs.json so a restarted desk finds the same panes.
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { AgentStore, agentCommand, type AgentId } from "./agents.js";
 
 const exec = promisify(execFile);
 
@@ -23,12 +25,13 @@ export interface PairModels {
   reviewer: string; // e.g. "opus" (used when the reviewer is Claude)
 }
 
-export interface TabPanes { tab: string; builder: string; reviewer: string }
+export interface TabPanes { tab: string; builder: string; reviewer: string; builderAgent?: AgentId; reviewerAgent?: AgentId }
 export interface PairRec {
   sourceId: string;
   session: string;
   workspace: string;
-  reviewerAgent: "codex" | "claude";
+  builderAgent?: AgentId; // the Settings pick when last opened (missing in old records: Claude)
+  reviewerAgent: AgentId; // each tab keeps the agents it was started with
   tabs: Record<string, TabPanes>; // "lead" | thread id
 }
 
@@ -54,10 +57,19 @@ export function onPath(cmd: string, path = process.env.PATH ?? ""): boolean {
   return path.split(delimiter).some((d) => d && existsSync(join(d, cmd)));
 }
 
-export function commands(reviewerAgent: "codex" | "claude", m: PairModels): { builder: string; reviewer: string } {
-  return {
-    builder: `claude --model ${m.builder}`,
-    reviewer: reviewerAgent === "codex" ? "codex" : `claude --model ${m.reviewer}`,
+/** Which agents a new pair runs, and where their binaries are. */
+export interface PairPick { builder: AgentId; reviewer: AgentId; paths: Partial<Record<AgentId, string>> }
+
+export function commands(builder: AgentId, reviewer: AgentId, m: PairModels, paths: PairPick["paths"] = {}): { builder: string; reviewer: string } {
+  return { builder: agentCommand(builder, paths[builder], m.builder), reviewer: agentCommand(reviewer, paths[reviewer], m.reviewer) };
+}
+
+/** The pick from <data>/agents.json (Settings), resolved against what is installed. */
+export function storePick(store: AgentStore): () => PairPick {
+  return () => {
+    const agents = store.agents();
+    const s = store.settings(agents);
+    return { builder: s.builder, reviewer: s.reviewer, paths: Object.fromEntries(agents.filter((a) => a.path).map((a) => [a.id, a.path!])) };
   };
 }
 
@@ -67,7 +79,7 @@ export class Pairs {
     dataDir: string,
     private herdr: Herdr = herdrCli(),
     private startServer: (session: string, cwd: string) => Promise<void> = startHerdrServer,
-    private codex = () => onPath("codex"),
+    private pick: () => PairPick = storePick(new AgentStore(dataDir)),
   ) {
     this.file = join(dataDir, ".index", "pairs.json");
   }
@@ -100,7 +112,10 @@ export class Pairs {
       firstPane = r.root_pane.pane_id;
       await this.herdr(session, ["tab", "rename", r.tab.tab_id, "lead"]).catch(() => {});
     }
-    if (!rec || rec.workspace !== ws) rec = { sourceId, session, workspace: ws, reviewerAgent: this.codex() ? "codex" : "claude", tabs: {} };
+    const pick = this.pick();
+    if (!rec || rec.workspace !== ws) rec = { sourceId, session, workspace: ws, reviewerAgent: pick.reviewer, tabs: {} };
+    rec.builderAgent = pick.builder;
+    rec.reviewerAgent = pick.reviewer;
 
     const livePanes = new Set<string>(((await this.herdr(session, ["pane", "list"]))?.panes ?? []).map((p: any) => p.pane_id));
     const have = rec.tabs[tab];
@@ -120,10 +135,13 @@ export class Pairs {
     }
     const split = await this.herdr(session, ["pane", "split", builder, "--direction", "right", "--cwd", cwd]);
     const reviewer: string = split.pane.pane_id;
-    const cmd = commands(rec.reviewerAgent, models);
+    // A live builder keeps its agent; a fresh tab gets the current Settings pick.
+    const bAgent = (!freshBuilder && have?.builderAgent) || (!freshBuilder ? "claude" : pick.builder);
+    const rAgent = (!freshBuilder && have?.reviewerAgent) || pick.reviewer;
+    const cmd = commands(bAgent, rAgent, models, pick.paths);
     if (freshBuilder) await this.herdr(session, ["pane", "run", builder, cmd.builder]); // never type into a running agent
     await this.herdr(session, ["pane", "run", reviewer, cmd.reviewer]);
-    rec.tabs[tab] = { tab: tabId, builder, reviewer };
+    rec.tabs[tab] = { tab: tabId, builder, reviewer, builderAgent: bAgent, reviewerAgent: rAgent };
     this.put(rec);
     return rec;
   }

@@ -36,7 +36,8 @@ import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
-import { Pairs, sessionName as pairSession } from "./pair.js";
+import { Pairs, sessionName as pairSession, storePick } from "./pair.js";
+import { AgentStore } from "./agents.js";
 import { deskState, desk2Action } from "./desk2-api.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
@@ -111,7 +112,8 @@ const bus = new EventBus(join(cfg.dataDir, ".index", "events.jsonl"));
 const store = new ThreadStore(cfg.dataDir);
 const mux = await createMux(cfg);
 const hsessions = new HerdrSessions(cfg.dataDir);
-const pairs = new Pairs(cfg.dataDir);
+const agentStore = new AgentStore(cfg.dataDir);
+const pairs = new Pairs(cfg.dataDir, undefined, undefined, storePick(agentStore));
 // Your live_sessions plus every named session opened from the desk.
 const liveClaude = new LiveClaude(() => [...cfg.liveSessions, ...hsessions.openNames()]);
 // Persistent sessions come back with the desk (reboot, restart), resuming Claude's last conversation.
@@ -345,6 +347,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
       return;
     }
     if (role && m.type === "schedules") return send({ type: "schedules", rows: scheduler.rows() });
+    if (role && m.type === "agents") return send({ type: "agents", ...agentStore.view() });
     if (role && m.type === "hsessions") return send({ type: "hsessions", rows: hsessionsFor(features, hsessions.rows4web(await runningSessions())) });
     if (role && (m.type === "usage" || m.type === "search")) {
       await bus.flush();
@@ -365,6 +368,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
 }
 
 async function handleAction(m: any, send: (m: unknown) => void, features: Set<Feature>) {
+  if (m.type === "agents_set") { agentStore.save(m.settings); return send({ type: "agents", ...agentStore.view(), saved: true }); }
   if (String(m.type).startsWith("hsession_")) needFeature(features, "sessions");
   if (m.sourceId != null && isSelfSource(store.get(String(m.sourceId)))) needFeature(features, "self");
   if (m.sourceId === COMPUTE_ID) needFeature(features, "compute");

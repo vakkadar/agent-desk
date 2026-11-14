@@ -289,6 +289,7 @@
       case "terminalPanel": closeMenu(); return X() ? X().toggleTerminal() : toast("Terminal needs the built desk (npm run build)");
       case "sessions": closeMenu(); return X()?.showHSessions();
       case "schedules": closeMenu(); return X()?.showSchedules();
+      case "settings": case "pair": closeMenu(); return X() ? X().showAgents() : toast("Settings needs the built desk (npm run build)");
       case "health": closeMenu(); return X()?.health();
       case "alerts": closeMenu(); return X()?.togglePush();
       case "attach": return $("attFile").click();
