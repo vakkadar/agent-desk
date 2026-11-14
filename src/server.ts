@@ -36,7 +36,7 @@ import { LiveClaude, listPanes, pickLive, type LivePane } from "./live.js";
 import { summarize } from "./notes.js";
 import { handleUploadHttp, checkPaths, buildPrompt } from "./uploads.js";
 import { Scheduler, scheduleTitle } from "./schedule.js";
-import { Pairs } from "./pair.js";
+import { Pairs, sessionName as pairSession } from "./pair.js";
 import { deskState, desk2Action } from "./desk2-api.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
@@ -89,7 +89,9 @@ const sourcesFor = (features: Set<Feature>) => store.list().filter((r) => seesSe
 const eventFor = (features: Set<Feature>, sourceId: string) => seesSelf(features) || !isSelfSource(store.get(sourceId));
 const hsessionsFor = <T extends { name: string; dir: string }>(features: Set<Feature>, rows: T[]) =>
   seesSelf(features) ? rows : rows.filter((r) => r.name !== cfg.selfDevSession && !insideRepo(r.dir));
-const selfSession = (name: string) => name === cfg.selfDevSession || insideRepo(hsessions.get(name)?.dir ?? "/nonexistent-dir");
+// The desk's own code in a terminal: its dev session, a named session in its repo, or the herdr pair of a self source.
+const selfSession = (name: string) => name === cfg.selfDevSession || insideRepo(hsessions.get(name)?.dir ?? "/nonexistent-dir")
+  || store.list().some((r) => isSelfSource(r) && pairSession(r.id) === name);
 
 /** guest_ask: a read-only connection may ask a browser-side target (the call runs on the
  *  guest's own sign-in there) as a new or picked General question. Nothing else. */

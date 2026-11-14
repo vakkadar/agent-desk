@@ -160,6 +160,14 @@ function closePanel() {
   document.body.classList.remove("term-open");
 }
 
+/** Open the panel, optionally on a given herdr session (desk2 menus). */
+export function openTerminal(name?: string) {
+  if (name) session = name;
+  if ($("#termPanel").hidden) openPanel();
+  else { disconnect(); retry = 500; term?.reset(); void loadSessions($<HTMLSelectElement>("#termSession")).then(connect); }
+}
+export function toggleTerminal() { $("#termPanel").hidden ? openPanel() : closePanel(); }
+
 export function initTerminal() {
   const btn = $("#termBtn");
   btn.addEventListener("click", () => ($("#termPanel").hidden ? openPanel() : closePanel()));
