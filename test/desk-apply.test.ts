@@ -120,6 +120,32 @@ test("desk-apply.sh: healthy new build stays; unhealthy one is rolled back to th
   }
 });
 
+test("desk-apply.sh on macOS restarts the launchd job with kickstart -k", async () => {
+  const { d, merge } = await repo();
+  writeFileSync(join(d, "dist", "v"), "new\n");
+  const bin = mkdtempSync(join(tmpdir(), "bin-"));
+  const log = join(bin, "log");
+  writeFileSync(join(bin, "uname"), "#!/bin/sh\necho Darwin\n");
+  writeFileSync(join(bin, "launchctl"), `#!/bin/sh\necho "$@" >> ${log}\n`);
+  writeFileSync(join(bin, "curl"), "#!/bin/sh\necho '{\"ok\":true}'\n");
+  for (const f of ["uname", "launchctl", "curl"]) chmodSync(join(bin, f), 0o755);
+  const result = join(bin, "result.json");
+  execFileSync("sh", [join(process.cwd(), "deploy", "desk-apply.sh"), d, "com.agent-desk.server", "http://x/healthz", result, "8", merge],
+    { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DESK_APPLY_TRIES: "2" } });
+  assert.equal(JSON.parse(readFileSync(result, "utf8")).state, "live");
+  assert.match(readFileSync(log, "utf8"), /^kickstart -k gui\/\d+\/com\.agent-desk\.server\n$/);
+});
+
+test("launchd plists: only the placeholders install.sh fills, and the desk job marks itself for apply", () => {
+  for (const f of ["com.agent-desk.herdr.plist", "com.agent-desk.server.plist"]) {
+    const t = readFileSync(join(process.cwd(), "deploy", "launchd", f), "utf8");
+    for (const m of t.matchAll(/@([A-Z]+)@/g)) assert.ok(["NODE", "NODEDIR", "REPO", "HOME"].includes(m[1]), `${f}: @${m[1]}@`);
+  }
+  const s = readFileSync(join(process.cwd(), "deploy", "launchd", "com.agent-desk.server.plist"), "utf8");
+  assert.match(s, /<key>AGENT_DESK_SERVICE<\/key><string>launchd<\/string>/);
+  assert.match(s, /<key>AbandonProcessGroup<\/key><true\/>/);
+});
+
 test("linkDeps: worktree shares node_modules and git never sees the link", async () => {
   const { d } = await repo();
   mkdirSync(join(d, "node_modules", "x"), { recursive: true });

@@ -18,6 +18,15 @@
 # Open it: herdr session attach <name>   (from the laptop: herdr --remote hp --session <name>)
 # Stop it: herdr session stop <name>     (then `herdr session delete <name>` to remove it)
 set -euo pipefail
+
+# The desk runs as a systemd user unit on Linux, a launchd agent on macOS (deploy/install.sh).
+restart_desk() {
+  if [ "$(uname -s)" = Darwin ]; then launchctl kickstart -k "gui/$(id -u)/com.agent-desk.server"; else systemctl --user restart agent-desk; fi
+}
+desk_up() {
+  if [ "$(uname -s)" = Darwin ]; then launchctl print "gui/$(id -u)/com.agent-desk.server" 2>/dev/null | grep -q "state = running"
+  else systemctl --user is-active agent-desk >/dev/null; fi
+}
 export PATH="$HOME/.local/bin:$PATH"
 
 claude=0 desk=0 cont=0 args=()
@@ -86,18 +95,18 @@ if [ $desk = 1 ]; then
     if grep '^live_sessions *=' "$toml" | grep -q "\"$name\""; then
       echo "desk already watches $name"
     else
-      sed -i "/^live_sessions *=/ { s/^live_sessions *= *\[/live_sessions = [\"$name\", /; s/, *\]/]/ }" "$toml"
+      sed -i.bak "/^live_sessions *=/ { s/^live_sessions *= *\[/live_sessions = [\"$name\", /; s/, *\]/]/; }" "$toml" && rm -f "$toml.bak" # GNU and BSD sed
       changed=1
     fi
   else
     # Top-level key: must sit above the first [table]. "default" stays, as before.
-    sed -i "1i live_sessions = [\"default\", \"$name\"]" "$toml"
+    { printf 'live_sessions = ["default", "%s"]\n' "$name"; cat "$toml"; } > "$toml.tmp" && mv "$toml.tmp" "$toml"
     changed=1
   fi
   if [ "${changed:-0}" = 1 ]; then
     grep '^live_sessions' "$toml"
     git -C "$data" commit -qm "Desk watches herdr session $name" desk.toml 2>/dev/null || true
-    systemctl --user restart agent-desk && echo "agent-desk restarted"
+    restart_desk && echo "agent-desk restarted"
   fi
 fi
 

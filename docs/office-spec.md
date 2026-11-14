@@ -278,11 +278,11 @@ Config lives in the data repo in the clear; secrets live outside it, mode 600, a
 
 ## Deploy and ops
 
-The desk runs unattended on one host as systemd user units, restartable at any time without losing turns, with a doctor and a health page to prove it is ready.
+The desk runs unattended on one host as systemd user units (Linux) or launchd agents (macOS), restartable at any time without losing turns, with a doctor and a health page to prove it is ready.
 
 - **Stack:** Node ≥ 22.13, TypeScript, `ws`, `node-pty`, `smol-toml`, `web-push`, xterm.js; vite for the page. `npm run build` = `tsc` + vite; `npm test` = `tsx --test test/*.test.ts`.
 - **Units** (`systemd --user`, `loginctl enable-linger`): `herdr.service` owns agent processes; `agent-desk.service` is stateless and re-attaches on start.
-- **Install:** `deploy/install.sh`, idempotent: `npm ci`, build, units, and the env file with a random token if missing.
+- **Install:** `deploy/install.sh`, idempotent: `npm ci`, build, units, and the env file with a random token if missing. On macOS it writes `com.agent-desk.herdr` and `com.agent-desk.server` to `~/Library/LaunchAgents` (logs in `~/Library/Logs/agent-desk/`); they start at login, so the Mac needs automatic login, no system sleep (`pmset -a sleep 0`) and `pmset -a autorestart 1` to come back alone. Doctor checks all three.
 - **Claude login:** `deploy/claude-token.sh` on the host in a real terminal gives the desk a long-lived token. Start the desk with no stray `ANTHROPIC_API_KEY` in its environment.
 - **Doctor** (`agent-desk doctor`): PASS / WARN / FAIL per check — sleep targets masked, BIOS power restore (reminder), auto-update reboots, Claude auth, herdr, linger, units, free disk, data repo remote, token, bind. Pluggable `registerCheck()`.
 - **Health:** `/healthz` plus a Health panel; pluggable `registerHealth()` providers (mux, git).

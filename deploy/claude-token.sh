@@ -11,6 +11,15 @@
 # CLAUDE_CODE_OAUTH_TOKEN, and the desk restarts to pick it up.
 set -euo pipefail
 
+# The desk runs as a systemd user unit on Linux, a launchd agent on macOS (deploy/install.sh).
+restart_desk() {
+  if [ "$(uname -s)" = Darwin ]; then launchctl kickstart -k "gui/$(id -u)/com.agent-desk.server"; else systemctl --user restart agent-desk; fi
+}
+desk_up() {
+  if [ "$(uname -s)" = Darwin ]; then launchctl print "gui/$(id -u)/com.agent-desk.server" 2>/dev/null | grep -q "state = running"
+  else systemctl --user is-active agent-desk >/dev/null; fi
+}
+
 ENV_FILE="${HOME}/.config/agent-desk/env"
 HERDR="${AGENT_DESK_HERDR_BIN:-herdr}"
 
@@ -51,7 +60,7 @@ mv "$tmp" "$ENV_FILE"
 # stop it so the restarted desk starts it again with the token. (Your own herdr
 # sessions are untouched.)
 env $(env | grep -o '^HERDR_[A-Z_]*' | sed 's/^/-u /') "$HERDR" --session agent-desk server stop >/dev/null 2>&1 || true
-systemctl --user restart agent-desk
+restart_desk
 sleep 2
-systemctl --user is-active agent-desk >/dev/null && echo "Done. Desk restarted with the long-lived login." || {
+desk_up && echo "Done. Desk restarted with the long-lived login." || {
   echo "Desk did not come back up: journalctl --user -u agent-desk -n 30" >&2; exit 1; }

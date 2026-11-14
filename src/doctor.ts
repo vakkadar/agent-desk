@@ -9,7 +9,7 @@ import { loadConfig, type DeskConfig } from "./config.js";
 export type Status = "PASS" | "WARN" | "FAIL";
 export interface CheckResult { status: Status; msg: string }
 export interface Ctx { cfg: DeskConfig; sh(cmd: string, args: string[], timeout?: number): Promise<{ ok: boolean; out: string }> }
-export interface Check { name: string; run(ctx: Ctx): Promise<CheckResult | CheckResult[]> }
+export interface Check { name: string; os?: NodeJS.Platform; run(ctx: Ctx): Promise<CheckResult | CheckResult[]> } // os: only there
 
 const checks: Check[] = [];
 export function registerCheck(c: Check): void { checks.push(c); }
@@ -25,6 +25,7 @@ const MIN_FREE_GB = Number(process.env.AGENT_DESK_MIN_FREE_GB ?? 5);
 
 registerCheck({
   name: "sleep targets masked",
+  os: "linux",
   async run({ sh }) {
     const bad: string[] = [];
     for (const t of ["sleep", "suspend", "hibernate", "hybrid-sleep"]) {
@@ -37,11 +38,13 @@ registerCheck({
 
 registerCheck({
   name: "bios power restore",
+  os: "linux",
   async run() { return warn("cannot detect: verify BIOS 'Restore on AC power loss' = On"); },
 });
 
 registerCheck({
   name: "auto-updates",
+  os: "linux",
   async run({ sh }) {
     const timers = await sh("systemctl", ["list-unit-files", "dnf5-automatic*.timer", "dnf-automatic*.timer", "--no-legend"]);
     const enabled = timers.out.split("\n").filter((l) => /\benabled\b/.test(l));
@@ -73,8 +76,10 @@ registerCheck({
       const days = (Date.parse(exp) - Date.now()) / 86400000;
       out.push(days < 0 ? fail("tailscale key expired") : days < 45 ? fail(`tailscale key expires in ${days.toFixed(0)}d; disable expiry in admin console`) : warn(`tailscale key expires in ${days.toFixed(0)}d; disable key expiry for this host`));
     }
-    const en = await sh("systemctl", ["is-enabled", "tailscaled"]);
-    out.push(/enabled/.test(en.out) ? pass("tailscaled enabled at boot") : warn("tailscaled not enabled at boot"));
+    if (process.platform === "linux") {
+      const en = await sh("systemctl", ["is-enabled", "tailscaled"]);
+      out.push(/enabled/.test(en.out) ? pass("tailscaled enabled at boot") : warn("tailscaled not enabled at boot"));
+    }
     return out;
   },
 });
@@ -104,6 +109,7 @@ registerCheck({
 
 registerCheck({
   name: "linger",
+  os: "linux",
   async run({ sh }) {
     const r = await sh("loginctl", ["show-user", process.env.USER ?? "", "-p", "Linger"]);
     return /Linger=yes/.test(r.out) ? pass("linger enabled") : fail("linger disabled (loginctl enable-linger)");
@@ -112,12 +118,51 @@ registerCheck({
 
 registerCheck({
   name: "units",
+  os: "linux",
   async run({ sh }) {
     const out: CheckResult[] = [];
     for (const u of ["herdr.service", "agent-desk.service"]) {
       const r = await sh("systemctl", ["--user", "is-enabled", u]);
       out.push(/^enabled/.test(r.out) ? pass(`${u} enabled`) : warn(`${u} not enabled (deploy/install.sh)`));
     }
+    return out;
+  },
+});
+
+// macOS: launchd agents instead of systemd units; pmset instead of masked sleep targets and the BIOS setting.
+registerCheck({
+  name: "sleep",
+  os: "darwin",
+  async run({ sh }) {
+    const r = await sh("pmset", ["-g"]);
+    const v = /^\s*sleep\s+(\d+)/m.exec(r.out)?.[1];
+    return v === "0" ? pass("system sleep off") : fail(`system sleep ${v ?? "?"} min (sudo pmset -a sleep 0 disablesleep 1)`);
+  },
+});
+
+registerCheck({
+  name: "power restore",
+  os: "darwin",
+  async run({ sh }) {
+    const r = await sh("pmset", ["-g"]);
+    const v = /^\s*autorestart\s+(\d+)/m.exec(r.out)?.[1];
+    if (v === undefined) return warn("autorestart not reported: check System Settings > Energy > Start up automatically after a power failure");
+    return v === "1" ? pass("starts up after a power failure") : fail("autorestart off (sudo pmset -a autorestart 1)");
+  },
+});
+
+registerCheck({
+  name: "launchd agents",
+  os: "darwin",
+  async run({ sh }) {
+    const out: CheckResult[] = [];
+    const uid = process.getuid?.() ?? 501;
+    for (const l of ["com.agent-desk.herdr", "com.agent-desk.server"]) {
+      const r = await sh("launchctl", ["print", `gui/${uid}/${l}`]);
+      out.push(!r.ok ? warn(`${l} not loaded (deploy/install.sh)`) : /state = running/.test(r.out) ? pass(`${l} running`) : warn(`${l} loaded, not running`));
+    }
+    const al = await sh("defaults", ["read", "/Library/Preferences/com.apple.loginwindow", "autoLoginUser"]);
+    out.push(al.ok && al.out === process.env.USER ? pass("automatic login on: agents come back after a restart") : warn("automatic login off: after a restart the agents wait for someone to log in (System Settings > Users & Groups)"));
     return out;
   },
 });
@@ -167,6 +212,7 @@ export async function runDoctor(cfg?: DeskConfig, log: (s: string) => void = con
   const ctx: Ctx = { cfg, sh };
   let fails = 0, warns = 0;
   for (const c of checks) {
+    if (c.os && c.os !== process.platform) continue;
     let rs: CheckResult[];
     try { const r = await c.run(ctx); rs = Array.isArray(r) ? r : [r]; } catch (e: any) { rs = [fail(`check crashed: ${e?.message ?? e}`)]; }
     for (const r of rs) {
@@ -179,7 +225,7 @@ export async function runDoctor(cfg?: DeskConfig, log: (s: string) => void = con
   return fails ? 1 : 0;
 }
 
-// The service gets its env from ~/.config/agent-desk/env (systemd EnvironmentFile). Doctor run by hand
+// The service gets its env from ~/.config/agent-desk/env (systemd EnvironmentFile; on macOS the launchd job sources it). Doctor run by hand
 // from a shell doesn't, so load the same file. Vars already set in the shell win.
 export function loadEnvFile(path: string, env: NodeJS.ProcessEnv = process.env): void {
   let text: string;

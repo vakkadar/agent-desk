@@ -46,7 +46,7 @@ import { readReview } from "./review.js";
 import { mailText } from "./links.js";
 import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.js";
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
-import { DeskApplies, linkDeps, systemdRestart } from "./desk-apply.js";
+import { DeskApplies, linkDeps, serviceRestart } from "./desk-apply.js";
 import { DeskPreviews } from "./desk-preview.js";
 import { COMPUTE_ID, Compute, computeBrief } from "./compute.js";
 
@@ -287,7 +287,7 @@ new LiveFollower(
 // Desk perspective: merged Desk threads are built, restarted into and kept only if healthy.
 const healthHost = cfg.network.bind.find((h) => h === "127.0.0.1" || h === "0.0.0.0" || h === "::") ? "127.0.0.1" : cfg.network.bind[0];
 const broadcastDesk = () => { for (const [s, f] of helloed) if (seesSelf(f)) s(deskState({ applies, previews })); };
-const applies = new DeskApplies(cfg.dataDir, DESK_REPO, { restart: systemdRestart(`http://${healthHost}:${cfg.port}/healthz`), onChange: () => broadcastDesk() });
+const applies = new DeskApplies(cfg.dataDir, DESK_REPO, { restart: serviceRestart(`http://${healthHost}:${cfg.port}/healthz`), onChange: () => broadcastDesk() });
 applies.resume();
 const previews = new DeskPreviews(cfg.dataDir, DESK_REPO, cfg.port + 100, () => broadcastDesk());
 // Compute perspective: machines in <data>/compute.toml, secrets in ~/.config/agent-desk/secrets.toml.

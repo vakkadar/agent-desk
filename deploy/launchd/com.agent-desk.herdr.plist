@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- herdr headless server (agent sessions). @HOME@ is substituted by deploy/install.sh. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.agent-desk.herdr</string>
+  <key>ProgramArguments</key>
+  <array><string>@HOME@/.local/bin/herdr</string><string>server</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>@HOME@/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>StandardOutPath</key><string>@HOME@/Library/Logs/agent-desk/herdr.log</string>
+  <key>StandardErrorPath</key><string>@HOME@/Library/Logs/agent-desk/herdr.log</string>
+</dict>
+</plist>

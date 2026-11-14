@@ -9,11 +9,12 @@
 //             source and running desk agree again.
 //   history - every apply, with a revert (a new revert commit, applied the same way).
 //
-// The restart and health wait run in deploy/desk-apply.sh under `systemd-run --user`: outside the
-// desk's own cgroup, so they survive the restart they cause. The script leaves its verdict in
+// The restart and health wait run in deploy/desk-apply.sh outside the desk's own service, so they
+// survive the restart they cause: under `systemd-run --user` on Linux, detached on macOS (the launchd
+// job has AbandonProcessGroup). The script leaves its verdict in
 // <data>/.index/desk-apply-result.json and the restarted desk picks it up.
 // Nothing is pushed.
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync, cpSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { git } from "./worktree.js";
@@ -203,12 +204,23 @@ export class DeskApplies {
   resume(): void { if (this.items.some((i) => i.state === "restarting")) this.watchResult(); }
 }
 
-/** Default restart: a transient systemd user unit runs deploy/desk-apply.sh outside our cgroup. */
-export function systemdRestart(healthUrl: string, unit = process.env.AGENT_DESK_UNIT ?? "agent-desk.service") {
+/** Default restart: deploy/desk-apply.sh outside our service. Linux: a transient systemd user unit;
+ *  macOS: a detached process (the launchd job, deploy/launchd, sets AGENT_DESK_SERVICE=launchd). */
+export function serviceRestart(healthUrl: string, unit?: string, env: NodeJS.ProcessEnv = process.env) {
   return async (rec: ApplyRec, resultFile: string): Promise<boolean> => {
-    if (!process.env.INVOCATION_ID) return false; // not started by systemd
+    const script = join(DESK_REPO, "deploy", "desk-apply.sh");
+    if (env.AGENT_DESK_SERVICE === "launchd") {
+      const args = [script, DESK_REPO, unit ?? env.AGENT_DESK_UNIT ?? "com.agent-desk.server", healthUrl, resultFile, String(rec.id), rec.commit];
+      await new Promise<void>((res, rej) => {
+        const c = spawn("sh", args, { cwd: DESK_REPO, detached: true, stdio: "ignore" });
+        c.once("error", rej);
+        c.once("spawn", () => { c.unref(); res(); });
+      });
+      return true;
+    }
+    if (!env.INVOCATION_ID) return false; // not started by systemd
     const r = await runCmd(["systemd-run", "--user", "--collect", "--quiet", `--unit=agent-desk-apply-${rec.id}-${Date.now()}`,
-      "sh", join(DESK_REPO, "deploy", "desk-apply.sh"), DESK_REPO, unit, healthUrl, resultFile, String(rec.id), rec.commit], DESK_REPO);
+      "sh", script, DESK_REPO, unit ?? env.AGENT_DESK_UNIT ?? "agent-desk.service", healthUrl, resultFile, String(rec.id), rec.commit], DESK_REPO);
     if (r.code !== 0) throw new Error(`systemd-run failed: ${tail(r.out)}`);
     return true;
   };

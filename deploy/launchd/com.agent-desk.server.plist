@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- agent-desk web cockpit. @NODE@, @REPO@ and @HOME@ are substituted by deploy/install.sh.
+     launchd has no EnvironmentFile: sh reads ~/.config/agent-desk/env, then execs node.
+     AbandonProcessGroup: a desk apply (deploy/desk-apply.sh) restarts this job and must outlive it. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.agent-desk.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string><string>-c</string>
+    <string>set -a; [ -f "$HOME/.config/agent-desk/env" ] &amp;&amp; . "$HOME/.config/agent-desk/env"; set +a; exec "@NODE@" dist/server.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>@REPO@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>@HOME@/.local/bin:@NODEDIR@:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>AGENT_DESK_SERVICE</key><string>launchd</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>@HOME@/Library/Logs/agent-desk/desk.log</string>
+  <key>StandardErrorPath</key><string>@HOME@/Library/Logs/agent-desk/desk.log</string>
+</dict>
+</plist>

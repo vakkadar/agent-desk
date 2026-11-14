@@ -1,7 +1,8 @@
 #!/bin/sh
 # Restart the desk on a new build and keep it only if it comes up healthy.
-# Started by the desk (src/desk-apply.ts) through `systemd-run --user`, so it runs outside the
-# desk's own cgroup and survives the restart it causes.
+# Started by the desk (src/desk-apply.ts) outside the desk's own service, so it survives the restart
+# it causes: Linux through `systemd-run --user`, macOS detached (the launchd job abandons its children).
+# <unit> is a systemd unit (agent-desk.service) or a launchd label (com.agent-desk.server).
 #
 #   desk-apply.sh <repo> <unit> <health-url> <result-file> <apply-id> <commit>
 #
@@ -15,7 +16,10 @@ TRIES=${DESK_APPLY_TRIES:-30}
 
 say() { # state reason
   r=$(printf '%s' "$2" | tr '"\\\n' "'/ ")
-  printf '{"id":%s,"state":"%s","reason":"%s","at":"%s"}\n' "$ID" "$1" "$r" "$(date -Is)" > "$RESULT.tmp" && mv "$RESULT.tmp" "$RESULT"
+  printf '{"id":%s,"state":"%s","reason":"%s","at":"%s"}\n' "$ID" "$1" "$r" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RESULT.tmp" && mv "$RESULT.tmp" "$RESULT"
+}
+restart() {
+  if [ "$(uname -s)" = Darwin ]; then launchctl kickstart -k "gui/$(id -u)/$UNIT"; else systemctl --user restart "$UNIT"; fi
 }
 healthy() {
   i=0
@@ -27,7 +31,7 @@ healthy() {
   return 1
 }
 
-systemctl --user restart "$UNIT"
+restart
 if healthy; then say live ""; exit 0; fi
 
 cd "$REPO" || { say failed "repo $REPO is gone"; exit 1; }
@@ -41,5 +45,5 @@ else
   git revert --abort >/dev/null 2>&1
   why="$why; revert failed, source still has $COMMIT"
 fi
-systemctl --user restart "$UNIT"
+restart
 if healthy; then say "rolled back" "$why"; else say failed "$why; the old build did not come up either"; fi

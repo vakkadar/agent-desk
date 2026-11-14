@@ -40,7 +40,7 @@ export class DeskPreviews {
     mkdirSync(data, { recursive: true });
     writeFileSync(join(data, "desk.toml"), `# preview of ${threadId}, made by the desk\nport = ${port}\nlive_sessions = []\nprofile = "admin"\n[network]\nbind = ["127.0.0.1"]\n`);
     const env: NodeJS.ProcessEnv = { ...process.env, AGENT_DESK_DATA: data };
-    delete env.AGENT_DESK_TOKEN; delete env.INVOCATION_ID;
+    delete env.AGENT_DESK_TOKEN; delete env.INVOCATION_ID; delete env.AGENT_DESK_SERVICE;
     p.state = "starting";
     this.changed();
     const child = spawn(process.execPath, ["dist/server.js"], { cwd: worktree, env, stdio: ["ignore", "ignore", "pipe"] });
