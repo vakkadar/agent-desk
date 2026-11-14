@@ -10,6 +10,9 @@
 //   tailscale = "hp"               # tailnet host name: online, last seen, IP
 //   ssh = "vakkadar@hp"            # optional: Uptime/Disk/Reboot/Shut down over ssh (BatchMode, keys only)
 //   ha_power = "switch.hp_desktop" # optional: Home Assistant entity that powers it on/off
+//   ha_on = "script.start_hp"      # optional, instead of ha_power: one script/button/scene per action,
+//   ha_off = "script.stop_hp"      #   each run (script.turn_on, button.press, scene.turn_on)
+//   ha_restart = "script.restart_hp"
 //   wake_mac = "aa:bb:cc:dd:ee:ff" # optional: Wake-on-LAN from the desk's host (same LAN only)
 //   hostinger_vm = 1330230         # optional: Hostinger VPS id: state, start/stop/restart, API menu
 //   godaddy = true                 # optional: GoDaddy API menu (domains, DNS)
@@ -48,6 +51,8 @@ export interface Machine {
   tailscale?: string;
   ssh?: string;
   haPower?: string;
+  /** Run-once HA entities (script/button/scene) for Power on / Power off / Restart. */
+  haRun?: { on?: string; off?: string; restart?: string };
   wakeMac?: string;
   hostingerVm?: number;
   godaddy?: boolean;
@@ -94,8 +99,12 @@ export function parseMachines(text: string): Machine[] {
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
     const wakeMac = str(m.wake_mac);
     if (wakeMac && !/^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i.test(wakeMac)) throw new Error(`${where}: wake_mac must look like aa:bb:cc:dd:ee:ff`);
+    const haRun = { on: str(m.ha_on), off: str(m.ha_off), restart: str(m.ha_restart) };
+    for (const [k, e] of Object.entries(haRun)) if (e && !/^(script|button|scene)\.[a-z0-9_]+$/.test(e)) throw new Error(`${where}: ha_${k} must be a script., button. or scene. entity`);
+    if (str(m.ha_power) && (haRun.on || haRun.off || haRun.restart)) throw new Error(`${where}: use ha_power or ha_on/ha_off/ha_restart, not both`);
     return {
-      id, os, label: str(m.label) ?? id, group: str(m.group), tailscale: str(m.tailscale), ssh: str(m.ssh), haPower: str(m.ha_power), wakeMac,
+      id, os, label: str(m.label) ?? id, group: str(m.group), tailscale: str(m.tailscale), ssh: str(m.ssh), haPower: str(m.ha_power),
+      haRun: haRun.on || haRun.off || haRun.restart ? haRun : undefined, wakeMac,
       hostingerVm: m.hostinger_vm != null ? Number(m.hostinger_vm) : undefined, godaddy: m.godaddy === true,
       actions: (Array.isArray(m.action) ? m.action : []).filter((a: any) => str(a?.label) && str(a?.run)).map((a: any) => ({ label: str(a.label)!, run: str(a.run)!, confirm: a.confirm === true })),
     };
@@ -139,6 +148,9 @@ const GODADDY_MENU: { id: string; label: string; path: (p: string) => string; pa
 export function actionsOf(m: Machine): ComputeAction[] {
   const a: ComputeAction[] = [];
   if (m.haPower) a.push({ id: "ha:on", label: "Power on", group: "power" }, { id: "ha:off", label: "Power off", group: "power", confirm: true });
+  if (m.haRun?.on) a.push({ id: "ha:on", label: "Power on", group: "power" });
+  if (m.haRun?.off) a.push({ id: "ha:off", label: "Power off", group: "power", confirm: true });
+  if (m.haRun?.restart) a.push({ id: "ha:restart", label: "Restart", group: "power", confirm: true });
   if (m.wakeMac) a.push({ id: "wol", label: "Wake (LAN)", group: "power" });
   if (m.hostingerVm != null) a.push({ id: "vps:start", label: "Start VPS", group: "power" }, { id: "vps:restart", label: "Restart VPS", group: "power", confirm: true }, { id: "vps:stop", label: "Stop VPS", group: "power", confirm: true });
   if (m.ssh && SSH_ACTIONS.uptime.run[m.os]) for (const s of Object.values(SSH_ACTIONS)) a.push({ id: s.id, label: s.label, group: "ssh", confirm: s.confirm });
@@ -176,6 +188,7 @@ export function computeBrief(ms: Machine[]): string {
     m.ssh ? `ssh \`${m.ssh}\`` : "no ssh",
     m.tailscale ? `tailnet name \`${m.tailscale}\`` : "",
     m.haPower ? `power via Home Assistant entity \`${m.haPower}\` (Compute menu)` : "",
+    m.haRun ? `power via Home Assistant ${Object.values(m.haRun).filter(Boolean).map((e) => `\`${e}\``).join(", ")} (Compute menu)` : "",
     m.hostingerVm ? `Hostinger VPS ${m.hostingerVm} (Compute menu)` : "",
     m.godaddy ? "GoDaddy domains account (Compute menu)" : "",
   ].filter(Boolean).join(" · ");
@@ -230,9 +243,9 @@ export class Compute {
           if (p) Object.assign(s, { online: !!p.Online, lastSeen: p.Online ? undefined : p.LastSeen, ip: p.TailscaleIPs?.[0] });
           else notes.push(`${m.tailscale} is not on the tailnet`);
         }
-        if (m.haPower) {
-          if (!sec.home_assistant?.url || !sec.home_assistant.token) notes.push("Home Assistant url/token missing in secrets.toml");
-          else s.power = await this.haState(sec, m.haPower).catch((e) => (notes.push(`Home Assistant: ${e.message}`), undefined));
+        if ((m.haPower || m.haRun) && (!sec.home_assistant?.url || !sec.home_assistant.token)) notes.push("Home Assistant url/token missing in secrets.toml");
+        else if (m.haPower) {
+          s.power = await this.haState(sec, m.haPower).catch((e) => (notes.push(`Home Assistant: ${e.message}`), undefined));
         }
         if (m.hostingerVm != null) {
           if (!sec.hostinger?.token) notes.push("Hostinger token missing in secrets.toml");
@@ -257,6 +270,13 @@ export class Compute {
       const [kind, sub] = action.split(":");
       switch (kind) {
         case "ha": {
+          if (m.haRun) {
+            const e = m.haRun[sub as "on" | "off" | "restart"]!;
+            const [d] = e.split(".");
+            const svc = d === "button" ? "press" : "turn_on";
+            await this.ha(sec, `/api/services/${d}/${svc}`, { entity_id: e });
+            return res(true, `${e}: ${d}.${svc} sent`);
+          }
           const domain = m.haPower!.split(".")[0];
           const svc = domain === "button" ? "press" : sub === "on" ? "turn_on" : "turn_off";
           if (domain === "button" && sub === "off") return res(false, "a button entity cannot turn off; use a switch or script");

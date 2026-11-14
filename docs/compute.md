@@ -15,6 +15,10 @@ group = "Home"
 tailscale = "hp"                  # online / last seen / IP from `tailscale status`
 ssh = "vakkadar@hp"               # Uptime, Disk, Reboot, Shut down
 ha_power = "switch.hp_desktop"    # Home Assistant entity: Power on / Power off (switch, script, input_boolean; button = on only)
+# or, instead of ha_power, one run-once entity (script./button./scene.) per action:
+# ha_on = "script.start_hp"       # Power on
+# ha_off = "script.stop_hp"       # Power off
+# ha_restart = "script.restart_hp" # Restart
 
 [[machine]]
 id = "imac-linux"

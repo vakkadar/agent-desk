@@ -85,6 +85,22 @@ test("run: HA power, Hostinger start and API menu, GoDaddy with sso-key, ssh", a
   assert.equal(execs.at(-1)!.at(-1), "sudo -n efibootmgr --bootnext 0080");
 });
 
+test("ha_on/ha_off/ha_restart run one script each; validation", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetch: Fetch = async (url, init) => { calls.push({ url, init }); return new Response("[]", { status: 200 }); };
+  const ms = parseMachines(`[[machine]]\nid = "hp"\nha_on = "script.start_hp"\nha_off = "script.stop_hp"\nha_restart = "button.restart_hp"`);
+  assert.deepEqual(actionsOf(ms[0]).map((a) => [a.id, !!a.confirm]), [["ha:on", false], ["ha:off", true], ["ha:restart", true]]);
+  const c = new Compute("/x", { fetch, exec: async () => ({ code: 0, out: "{}" }), secrets: () => SECRETS, machines: () => ms });
+  assert.equal((await c.run("hp", "ha:off")).ok, true);
+  assert.equal(calls.at(-1)!.url, "http://ha:8123/api/services/script/turn_on");
+  assert.equal(JSON.parse(String(calls.at(-1)!.init!.body)).entity_id, "script.stop_hp");
+  await c.run("hp", "ha:restart");
+  assert.equal(calls.at(-1)!.url, "http://ha:8123/api/services/button/press");
+  assert.equal((await c.state()).machines[0].power, undefined);
+  assert.throws(() => parseMachines(`[[machine]]\nid = "a"\nha_on = "switch.x"`), /script\., button\. or scene\./);
+  assert.throws(() => parseMachines(`[[machine]]\nid = "a"\nha_power = "switch.x"\nha_on = "script.x"`), /not both/);
+});
+
 test("run refuses what the machine doesn't offer and bad params", async () => {
   const { c, calls } = rig();
   assert.equal((await c.run("iphone", "ssh:reboot")).ok, false);
