@@ -39,6 +39,7 @@ import { Scheduler, scheduleTitle } from "./schedule.js";
 import { Pairs, sessionName as pairSession, storePick } from "./pair.js";
 import { AgentStore } from "./agents.js";
 import { deskState, desk2Action } from "./desk2-api.js";
+import { Relay } from "./relay.js";
 import { MergeQueue } from "./merge-queue.js";
 import { readReview } from "./review.js";
 import { mailText } from "./links.js";
@@ -114,6 +115,8 @@ const mux = await createMux(cfg);
 const hsessions = new HerdrSessions(cfg.dataDir);
 const agentStore = new AgentStore(cfg.dataDir);
 const pairs = new Pairs(cfg.dataDir, undefined, undefined, storePick(agentStore));
+// Carries findings reviewer → builder and fixes builder → reviewer through each thread's verdict file.
+new Relay(pairs, store).start();
 // Your live_sessions plus every named session opened from the desk.
 const liveClaude = new LiveClaude(() => [...cfg.liveSessions, ...hsessions.openNames()]);
 // Persistent sessions come back with the desk (reboot, restart), resuming Claude's last conversation.

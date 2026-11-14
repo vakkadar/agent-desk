@@ -80,7 +80,7 @@ export function reviewerBrief(threadId: string, path: string, base: string): str
   return [
     `You are the adversarial reviewer for ${threadId}. Review the builder's changes since ${base.slice(0, 12)} (git diff ${base.slice(0, 12)}).`,
     `Write your verdict to ${path} as JSON: {"round": N, "reviewer": "<you>", "findings": [{"id": "F1", "severity": "high|medium|low", "file": "...", "line": 1, "text": "...", "status": "open"}]}.`,
-    `Talk to the builder directly. When the builder says a finding is fixed it marks it "claimed"; re-check it yourself and only then set "verified".`,
+    `The desk passes your open findings to the builder and tells you when the builder marks one "claimed"; re-check it yourself and only then set "verified".`,
     `If you and the builder disagree after one exchange, set "disputed" with a short "note" for the user. Never edit code yourself.`,
   ].join(" "); // one line: a newline typed into the pane's TUI would submit early
 }

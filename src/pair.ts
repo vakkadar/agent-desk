@@ -38,6 +38,13 @@ export interface PairRec {
 type Role = "builder" | "reviewer";
 const ROLES: Role[] = ["builder", "reviewer"];
 const TRUST = /Yes, I trust this folder/;
+/** The pane's agent has exited and its shell is back: last non-empty line is a prompt ("user@host:dir$"). */
+export const atShell = (screen: string) => {
+  // A narrow pane wraps a long prompt over several lines: try the last line, then it joined to the ones above.
+  const ls = screen.split("\n").map((l) => l.trimEnd()).filter(Boolean).slice(-6);
+  for (let k = ls.length - 1; k >= 0; k--) if (/(^|\s)[\w.-]+@[\w.-]+:.*[$#]$/.test(ls.slice(k).join(""))) return true;
+  return false;
+};
 
 export const sessionName =(sourceId: string) => `desk-${sourceId}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 40);
 
@@ -102,6 +109,8 @@ export class Pairs {
 
   get(sourceId: string): PairRec | undefined { return this.all()[sourceId]; }
 
+  list(): PairRec[] { return Object.values(this.all()); }
+
   /** Open (or re-find) the project's herdr session and the builder | reviewer tab for `tab`. */
   async open(sourceId: string, cwd: string, tab = "lead", models: PairModels = { builder: "sonnet", reviewer: "opus" }): Promise<PairRec> {
     const session = sessionName(sourceId);
@@ -123,7 +132,12 @@ export class Pairs {
 
     const livePanes = new Set<string>(((await this.herdr(session, ["pane", "list"]))?.panes ?? []).map((p: any) => p.pane_id));
     const have = rec.tabs[tab];
-    if (have && livePanes.has(have.builder) && livePanes.has(have.reviewer)) return rec;
+    if (have && livePanes.has(have.builder) && livePanes.has(have.reviewer)) {
+      // Panes are there, but an agent may have exited (or a restored session failed to resume): start it again.
+      const cmd = commands(have.builderAgent ?? "claude", have.reviewerAgent ?? rec.reviewerAgent, models, pick.paths);
+      for (const r of ROLES) if (atShell(await this.screen(session, have[r]))) await this.herdr(session, ["pane", "run", have[r], cmd[r]]);
+      return rec;
+    }
 
     let tabId: string, builder: string, freshBuilder = true;
     if (tab === "lead" && firstPane) {
@@ -155,6 +169,8 @@ export class Pairs {
     const rec = this.get(sourceId);
     const t = rec?.tabs[tab];
     if (!rec || !t) throw new Error(`no ${tab} pair open for ${sourceId}`);
+    // Never type a message into a bare shell: it would run as a command.
+    if (atShell(await this.screen(rec.session, t[role]))) throw new Error(`${tab}: the ${role} agent is not running (open the pair again to restart it)`);
     await this.herdr(rec.session, ["pane", "send-text", t[role], text]);
     await this.herdr(rec.session, ["pane", "send-keys", t[role], "enter"]);
   }

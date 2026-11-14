@@ -11,6 +11,7 @@ import { links } from "./links.js";
 import { isSelfSource } from "./self-dev.js";
 import { DESK_CHECK, linkDeps, type DeskApplies } from "./desk-apply.js";
 import type { DeskPreviews } from "./desk-preview.js";
+import { excludeDesk } from "./relay.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -61,6 +62,7 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       if (tab !== "lead") need(rec.threads[tab], "thread");
       const dir = tab === "lead" ? rec.location : threadDir(rec, tab);
       const pair = await c.pairs.open(rec.id, dir, tab);
+      await excludeDesk(rec.location); // verdict and relay files stay out of git status
       c.send({ type: "pair", sourceId: rec.id, pair, attach: c.pairs.attachCommand(rec.id) });
       // First Claude run in this folder: it waits on "trust this folder?" until the user says yes.
       const roles = await c.pairs.trustPending(rec.id, tab);

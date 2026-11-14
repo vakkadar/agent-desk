@@ -137,3 +137,26 @@ test("trust: two Claude panes; cursor already on Yes sends Enter only", async ()
   assert.deepEqual(f.runs.slice(-2), [[t.builder, "send-keys:enter"], [t.reviewer, "send-keys:down enter"]]);
   await assert.rejects(p.acceptTrust("s", "code-9"), /no code-9 pair/);
 });
+
+test("atShell: a bare shell prompt, not an agent screen", async () => {
+  const { atShell } = await import("../src/pair.js");
+  assert.equal(atShell("No conversation found\nvakkadar@linux-laptop:/tmp/x/repo$ \n\n"), true);
+  assert.equal(atShell("root@hp:~# "), true);
+  assert.equal(atShell("╭──────╮\n│ > Try \"fix lint\" │\n╰──────╯\n  ? for shortcuts"), false);
+  assert.equal(atShell(""), false);
+  assert.equal(atShell("bash: syntax error near unexpected token `('\nvakkadar@linux-laptop:/tmp/claude-1000/-home-va\nkkadar-projects/scratchpad/pai\nrrun/repo$ "), true); // wrapped prompt
+});
+
+test("reopen restarts an agent that fell back to its shell; sendTo never types into a shell", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, () => ({ builder: "claude", reviewer: "opencode", paths: { opencode: "/o/opencode" } }));
+  const t = (await p.open("s1", "/repo", "code-1")).tabs["code-1"];
+  f.screens.set(t.builder, "No conversation found\nme@box:/repo$ ");
+  await assert.rejects(p.sendTo("s1", "code-1", "builder", "fix F1"), /builder agent is not running/);
+  f.runs.length = 0;
+  await p.open("s1", "/repo", "code-1");
+  assert.deepEqual(f.runs.map((r) => r[0]), [t.builder]); // only the dead one, the reviewer keeps running
+  f.screens.set(t.builder, "> ");
+  await p.sendTo("s1", "code-1", "builder", "fix F1");
+  assert.deepEqual(f.runs.slice(1).map((r) => r[1]), ["send-text:fix F1", "send-keys:enter"]);
+});
