@@ -59,8 +59,20 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       if (rec.kind !== "local") throw new Error("a pair needs a local project folder");
       const tab = m.threadId && m.threadId !== "ask" ? String(m.threadId) : "lead";
       if (tab !== "lead") need(rec.threads[tab], "thread");
-      const pair = await c.pairs.open(rec.id, tab === "lead" ? rec.location : threadDir(rec, tab), tab);
+      const dir = tab === "lead" ? rec.location : threadDir(rec, tab);
+      const pair = await c.pairs.open(rec.id, dir, tab);
       c.send({ type: "pair", sourceId: rec.id, pair, attach: c.pairs.attachCommand(rec.id) });
+      // First Claude run in this folder: it waits on "trust this folder?" until the user says yes.
+      const roles = await c.pairs.trustPending(rec.id, tab);
+      if (roles.length) c.send({ type: "pair_trust", sourceId: rec.id, threadId: tab, dir, roles });
+      return true;
+    }
+    case "pair_trust": {
+      // The user tapped "Trust folder": answer Claude's first-run question in the pair's panes.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const tab = m.threadId && m.threadId !== "ask" ? String(m.threadId) : "lead";
+      const roles = await c.pairs.acceptTrust(rec.id, tab);
+      c.send({ type: "pair_trusted", sourceId: rec.id, threadId: tab, roles });
       return true;
     }
     case "pair_close": {

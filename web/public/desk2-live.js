@@ -143,6 +143,18 @@
       L.pair[m.sourceId] = m.pair;
       if (L.wantTerm === m.sourceId && L.features.includes("terminal") && X()) { L.wantTerm = null; X().openTerminal(m.pair.session); }
       else if (m.attach) toast(`Pair open in herdr: ${m.attach.join(" ")}`);
+    } else if (m.type === "pair_trust") {
+      // Claude in the new pair waits on "trust this folder?" (first run there): ask the user here.
+      document.querySelector(".trustbar")?.remove();
+      const bar = document.createElement("div");
+      bar.className = "trustbar";
+      bar.innerHTML = `<span><b>Claude (${esc(m.roles.join(" and "))}) asks to trust this folder</b><small>${esc(m.dir)} — it can read, edit and run files there</small></span><button type="button" class="primary">Trust folder</button><button type="button">Not now</button>`;
+      const [yes, no] = bar.querySelectorAll("button");
+      yes.onclick = () => { wsSend({ type: "pair_trust", sourceId: m.sourceId, threadId: m.threadId }); bar.remove(); };
+      no.onclick = () => bar.remove();
+      document.body.append(bar);
+    } else if (m.type === "pair_trusted") {
+      toast("Folder trusted: Claude is starting");
     } else if (m.type === "pair_review") {
       toast("Reviewer asked to check the current diff");
     } else if (m.type === "notes") {

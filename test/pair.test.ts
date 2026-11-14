@@ -11,6 +11,7 @@ function fakeHerdr() {
   const tabs: { id: string; label: string }[] = [];
   const panes = new Set<string>();
   const runs: [string, string][] = [];
+  const screens = new Map<string, string>();
   let n = 0;
   const pane = () => { const id = `w1:p${++n}`; panes.add(id); return id; };
   const h: Herdr = async (_s, a) => {
@@ -32,10 +33,11 @@ function fakeHerdr() {
     if (k === "pane list") return { panes: [...panes].map((p) => ({ pane_id: p })) };
     if (k === "pane split") return { pane: { pane_id: pane() } };
     if (k === "pane run") { runs.push([a[2], a[3]]); return null; }
-    if (k === "pane send-text" || k === "pane send-keys") { runs.push([a[2], `${a[1]}:${a[3]}`]); return null; }
+    if (k === "pane read") return screens.get(a[2]) ?? "";
+    if (k === "pane send-text" || k === "pane send-keys") { runs.push([a[2], `${a[1]}:${a.slice(3).join(" ")}`]); return null; }
     throw new Error("unexpected " + a.join(" "));
   };
-  return { h, runs, panes, tabs };
+  return { h, runs, panes, tabs, screens };
 }
 
 const dir = () => mkdtempSync(join(tmpdir(), "pair-"));
@@ -107,4 +109,31 @@ test("sendTo types into the chosen pane, then Enter; unknown tab refused", async
   await p.sendTo("s", "code-1", "reviewer", "review please");
   assert.deepEqual(f.runs.slice(-2), [[p.get("s")!.tabs["code-1"].reviewer, "send-text:review please"], [p.get("s")!.tabs["code-1"].reviewer, "send-keys:enter"]]);
   await assert.rejects(p.sendTo("s", "code-9", "builder", "x"), /no code-9 pair/);
+});
+
+test("trust: only Claude panes on the trust screen are reported, and only they get the keys", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, cx);
+  await p.open("s", "/x", "code-1");
+  const t = p.get("s")!.tabs["code-1"];
+  assert.deepEqual(await p.trustPending("s", "code-1", 0), []);
+  await assert.rejects(p.acceptTrust("s", "code-1"), /no pane is asking/);
+  f.screens.set(t.builder, " ❯ No, exit\n   Yes, I trust this folder\n");
+  f.screens.set(t.reviewer, "Yes, I trust this folder"); // codex pane: never touched
+  assert.deepEqual(await p.trustPending("s", "code-1", 0), ["builder"]);
+  assert.deepEqual(await p.acceptTrust("s", "code-1"), ["builder"]);
+  assert.deepEqual(f.runs.at(-1), [t.builder, "send-keys:down enter"]);
+  assert.equal(f.runs.filter(([pn, c]) => pn === t.reviewer && c.startsWith("send-keys")).length, 0);
+});
+
+test("trust: two Claude panes; cursor already on Yes sends Enter only", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, cc);
+  await p.open("s", "/x", "code-1");
+  const t = p.get("s")!.tabs["code-1"];
+  f.screens.set(t.builder, "   No, exit\n ❯ Yes, I trust this folder");
+  f.screens.set(t.reviewer, " ❯ No, exit\n   Yes, I trust this folder");
+  assert.deepEqual(await p.acceptTrust("s", "code-1"), ["builder", "reviewer"]);
+  assert.deepEqual(f.runs.slice(-2), [[t.builder, "send-keys:enter"], [t.reviewer, "send-keys:down enter"]]);
+  await assert.rejects(p.acceptTrust("s", "code-9"), /no code-9 pair/);
 });

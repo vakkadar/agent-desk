@@ -282,6 +282,9 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .menu .it b { font-weight: 600; font-size: 13px; } .menu .it span { font-size: 12px; color: var(--mute); }
 .menu .it[disabled] { opacity: .45; cursor: default; }
 .menu .it.on b::after { content: "  ✓"; color: var(--acc); }
+.trustbar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 51; display: flex; gap: 12px; align-items: center; background: var(--card); color: var(--fg); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18); max-width: calc(100% - 32px); font-size: 13px; }
+.trustbar small { display: block; color: var(--mute); word-break: break-all; }
+.trustbar button { flex: none; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 50; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
 .toast.on { opacity: 1; }
 .only-phone { display: none !important; }

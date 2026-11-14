@@ -35,7 +35,11 @@ export interface PairRec {
   tabs: Record<string, TabPanes>; // "lead" | thread id
 }
 
-export const sessionName = (sourceId: string) => `desk-${sourceId}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 40);
+type Role = "builder" | "reviewer";
+const ROLES: Role[] = ["builder", "reviewer"];
+const TRUST = /Yes, I trust this folder/;
+
+export const sessionName =(sourceId: string) => `desk-${sourceId}`.replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 40);
 
 /** Env without HERDR_*: herdr refuses some calls when it thinks it runs inside its own pane. */
 function cleanEnv(): NodeJS.ProcessEnv {
@@ -153,6 +157,44 @@ export class Pairs {
     if (!rec || !t) throw new Error(`no ${tab} pair open for ${sourceId}`);
     await this.herdr(rec.session, ["pane", "send-text", t[role], text]);
     await this.herdr(rec.session, ["pane", "send-keys", t[role], "enter"]);
+  }
+
+  /** Claude panes of a tab sitting on Claude's "trust this folder?" screen (first run in a folder).
+   *  Polls up to waitMs: Claude takes a moment to draw it. */
+  async trustPending(sourceId: string, tab: string, waitMs = 6000): Promise<Role[]> {
+    const rec = this.get(sourceId);
+    const t = rec?.tabs[tab];
+    if (!rec || !t) return [];
+    const roles = ROLES.filter((r) => (r === "builder" ? t.builderAgent ?? "claude" : t.reviewerAgent ?? rec.reviewerAgent) === "claude");
+    if (!roles.length) return [];
+    const until = Date.now() + waitMs;
+    for (;;) {
+      const hit: Role[] = [];
+      for (const r of roles) if (TRUST.test(await this.screen(rec.session, t[r]))) hit.push(r);
+      if (hit.length || Date.now() >= until) return hit;
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+  }
+
+  /** Answer "Yes, I trust this folder" in each of the tab's panes still asking (the user tapped Trust). */
+  async acceptTrust(sourceId: string, tab: string): Promise<Role[]> {
+    const rec = this.get(sourceId);
+    const t = rec?.tabs[tab];
+    if (!rec || !t) throw new Error(`no ${tab} pair open for ${sourceId}`);
+    const done: Role[] = [];
+    for (const r of await this.trustPending(sourceId, tab, 0)) {
+      // Options: "❯ No, exit" then "Yes, I trust this folder". Move to Yes unless already there.
+      const onYes = /❯\s*Yes, I trust this folder/.test(await this.screen(rec.session, t[r]));
+      await this.herdr(rec.session, ["pane", "send-keys", t[r], ...(onYes ? [] : ["down"]), "enter"]);
+      done.push(r);
+    }
+    if (!done.length) throw new Error(`${tab}: no pane is asking to trust its folder`);
+    return done;
+  }
+
+  private async screen(session: string, pane: string): Promise<string> {
+    const s = await this.herdr(session, ["pane", "read", pane, "--source", "visible"]).catch(() => "");
+    return typeof s === "string" ? s : JSON.stringify(s ?? "");
   }
 
   /** Close one thread's tab (its two agents stop). The project session stays. */
