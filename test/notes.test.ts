@@ -73,3 +73,22 @@ test("notes: turn aggregation, md, git commit + redact + push", async () => {
   await g.commitNow();
   assert.equal(g.status().lastPushOk, false);
 });
+
+test("data repo: log and .bak stay out of git, already-tracked files stay tracked, the vault goes in", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ad-gi-"));
+  const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd: dir, encoding: "utf8" });
+  git("init", "-q");
+  await writeFile(join(dir, "desk.toml"), 'profile = "admin"\n');
+  git("add", "-A"); git("commit", "-qm", "old desk"); // an older desk committed it
+  await writeFile(join(dir, "desk.log"), "x\n");
+  await writeFile(join(dir, "desk.toml.bak"), "old\n");
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(join(dir, "vault"));
+  await writeFile(join(dir, "vault", "hp.tar.gpg"), "sealed");
+  const g = new DeskGit(dir, { push: false, remote: "origin" }, 20);
+  await g.init();
+  await g.init(); // idempotent
+  await g.commitNow();
+  assert.deepEqual(git("ls-files").trim().split("\n").sort(), [".gitignore", "desk.toml", "vault/hp.tar.gpg"]);
+  assert.equal((await readFile(join(dir, ".gitignore"), "utf8")).split("\n").filter((l) => l === "desk.log").length, 1);
+});

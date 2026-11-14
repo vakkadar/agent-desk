@@ -1,6 +1,6 @@
 // agent-desk server: HTTP (static SPA) + WebSocket (events, prompts).
 import { createServer, type IncomingMessage } from "node:http";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,7 +45,7 @@ import { ensureWorktree, isGitRepo, snapshot, type Worktree } from "./worktree.j
 import { DESK_DEV_ID, DESK_REPO, commitTurn, insideRepo, isSelfSource } from "./self-dev.js";
 import { DeskApplies, linkDeps, systemdRestart } from "./desk-apply.js";
 import { DeskPreviews } from "./desk-preview.js";
-import { Compute } from "./compute.js";
+import { COMPUTE_ID, Compute, computeBrief } from "./compute.js";
 
 const cfg = await loadConfig();
 const guard = new Guard(cfg.network);
@@ -86,8 +86,11 @@ function featuresFor(req: IncomingMessage): Set<Feature> {
 
 /** The desk's own code (any source inside its repo) is for the admin profile only. */
 const seesSelf = (features: Set<Feature>) => features.has("self");
-const sourcesFor = (features: Set<Feature>) => store.list().filter((r) => seesSelf(features) || !isSelfSource(r));
-const eventFor = (features: Set<Feature>, sourceId: string) => seesSelf(features) || !isSelfSource(store.get(sourceId));
+/** The Compute chat (machines, ssh) is for the admin profile only, like the desk's own code. */
+const seesSource = (features: Set<Feature>, r?: SourceRec) =>
+  (seesSelf(features) || !isSelfSource(r)) && (r?.id !== COMPUTE_ID || features.has("compute"));
+const sourcesFor = (features: Set<Feature>) => store.list().filter((r) => seesSource(features, r));
+const eventFor = (features: Set<Feature>, sourceId: string) => seesSource(features, store.get(sourceId));
 const hsessionsFor = <T extends { name: string; dir: string }>(features: Set<Feature>, rows: T[]) =>
   seesSelf(features) ? rows : rows.filter((r) => r.name !== cfg.selfDevSession && !insideRepo(r.dir));
 // The desk's own code in a terminal: its dev session, a named session in its repo, or the herdr pair of a self source.
@@ -146,6 +149,16 @@ if (cfg.selfDev && !store.get(DESK_DEV_ID)) {
 }
 // The desk's own code: every tool use asks for approval unless desk.toml says otherwise.
 cfg.permissionMode[DESK_DEV_ID] ??= "default";
+// Compute chat: its folder holds only the generated CLAUDE.md (in .index/, so not in the data repo).
+const COMPUTE_DIR = join(cfg.dataDir, ".index", "compute");
+await mkdir(COMPUTE_DIR, { recursive: true });
+if (!store.get(COMPUTE_ID)) {
+  const session = await agent.start({ cwd: COMPUTE_DIR, name: `${COMPUTE_ID}-all` });
+  await store.save({ id: COMPUTE_ID, kind: "local", location: COMPUTE_DIR, agent: agent.id, builtin: true,
+    threads: { ask: { id: "ask", mode: "ask", session, createdAt: new Date().toISOString(), title: "All machines" } } });
+}
+// Machines are reached over ssh: every tool use asks for approval unless desk.toml says otherwise.
+cfg.permissionMode[COMPUTE_ID] ??= "default";
 if (mux.herdr) {
   // Keep an interactive Claude open in the General herdr session; restart it if it exits.
   const keepGeneral = () => ensureGeneralHerdr(cfg.dataDir, cfg.generalDir).catch((e) => console.warn("[general] herdr session:", e.message));
@@ -207,8 +220,8 @@ const http = createServer(async (req, res) => {
     return;
   }
   const path = normalize(decodeURIComponent((req.url ?? "/").split("?")[0])).replace(/^(\.\.[/\\])+/, "");
-  // "/" is the new desk (desk2.html); the classic desk stays at /index.html.
-  const file = join(webRoot, path === "/" ? "desk2.html" : path);
+  // "/" is the desk (desk2.html); old /index.html links (bookmarks, alerts) land there too.
+  const file = join(webRoot, path === "/" || path === "/index.html" ? "desk2.html" : path);
   if (!file.startsWith(webRoot)) {
     res.writeHead(400).end();
     return;
@@ -354,6 +367,7 @@ function onClient(ws: WebSocket, req: IncomingMessage) {
 async function handleAction(m: any, send: (m: unknown) => void, features: Set<Feature>) {
   if (String(m.type).startsWith("hsession_")) needFeature(features, "sessions");
   if (m.sourceId != null && isSelfSource(store.get(String(m.sourceId)))) needFeature(features, "self");
+  if (m.sourceId === COMPUTE_ID) needFeature(features, "compute");
   if (m.type === "attach" && sourceKind(String(m.location ?? "")) === "local" && insideRepo(expandHome(String(m.location).trim()))) needFeature(features, "self");
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
@@ -486,6 +500,7 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
       return;
     }
     case "prompt": {
+      if (m.sourceId === COMPUTE_ID) await computeTurn(m);
       // Snapshot a worktree thread before the turn: the "since my last message" diff base.
       const th = store.get(String(m.sourceId))?.threads[String(m.threadId)];
       if (th?.worktree) { th.lastSnap = await snapshot(th.worktree).catch(() => th.lastSnap); await store.save(store.get(String(m.sourceId))!); }
@@ -569,6 +584,29 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
  * One prompt turn, shared by the browser "prompt" action and scheduled runs.
  * opts.title: name for a new General question. opts.noLive: use the desk's own session, never the live herdr window.
  */
+/**
+ * Compute chat turn: one thread per machine (made on its first message), the machine named in the
+ * prompt, and a fresh CLAUDE.md with every machine from compute.toml.
+ */
+async function computeTurn(m: any) {
+  const rec = need(store.get(COMPUTE_ID), "source");
+  const machines = compute.machines();
+  await writeFile(join(COMPUTE_DIR, "CLAUDE.md"), computeBrief(machines));
+  const id = String(m.threadId ?? "ask");
+  if (id !== "ask") {
+    const mach = machines.find((x) => x.id === id);
+    if (!mach) throw new Error(`no machine ${id} in compute.toml`);
+    if (!rec.threads[id]) {
+      rec.threads[id] = { id, mode: "ask", session: await agent.start({ cwd: COMPUTE_DIR, name: `${COMPUTE_ID}-${id}` }), createdAt: new Date().toISOString(), title: mach.label };
+      await store.save(rec);
+      broadcastSources();
+    }
+  }
+  m.threadId = id;
+  m.target = undefined; // always Claude on this host: it holds the ssh keys
+  m.text = `compute[${id === "ask" ? "all" : id}]: ${String(m.text ?? "").trim()}`;
+}
+
 async function runPrompt(m: any, send: (m: unknown) => void, opts: { title?: string; noLive?: boolean } = {}) {
   const rec = need(store.get(m.sourceId), "source");
   let th;

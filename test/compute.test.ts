@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Compute, actionsOf, loadSecrets, magicPacket, parseMachines, type Exec, type Fetch } from "../src/compute.js";
+import { Compute, actionsOf, computeBrief, loadSecrets, magicPacket, parseMachines, type Exec, type Fetch } from "../src/compute.js";
 
 const TOML = `
 [[machine]]
@@ -119,4 +119,14 @@ test("parseMachines validates; secrets file must be 0600; magic packet", () => {
   const p = magicPacket("aa:bb:cc:dd:ee:ff");
   assert.equal(p.length, 102);
   assert.equal(p.subarray(6, 12).toString("hex"), "aabbccddeeff");
+});
+
+test("computeBrief: every machine with how to reach it, and the ask-first rules", () => {
+  const b = computeBrief(parseMachines(TOML));
+  assert.match(b, /\*\*hp\*\* \(HP desktop, linux\) · ssh `me@hp` · tailnet name `hp` · power via Home Assistant entity `switch.hp_desktop`/);
+  assert.match(b, /\*\*vps\*\*.*Hostinger VPS 1330230/);
+  assert.match(b, /\*\*iphone\*\* \(iphone, ios\) · no ssh/);
+  assert.match(b, /Ask in chat before anything that changes a machine/);
+  assert.match(b, /Never print, copy or read secrets/);
+  assert.match(computeBrief([]), /\(none configured\)/);
 });

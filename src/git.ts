@@ -4,6 +4,9 @@ import { readFile, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { redact } from "./secrets.js";
 
+/** Kept out of the data repo: the index, this host's log, and vault restore leftovers. */
+const KEEP_OUT = [".index/", "desk.log", "*.bak"];
+
 export interface GitConfig { push: boolean; remote: string }
 export interface GitStatus { lastCommit: string | null; lastPush: string | null; lastPushOk: boolean | null; pending: boolean }
 
@@ -32,7 +35,11 @@ export class DeskGit {
     if (!exists) await this.git("init", "-q");
     const gi = join(this.dir, ".gitignore");
     const cur = await readFile(gi, "utf8").catch(() => "");
-    if (!cur.includes(".index/")) await writeFile(gi, cur + (cur && !cur.endsWith("\n") ? "\n" : "") + ".index/\n");
+    const have = new Set(cur.split("\n").map((l) => l.trim()));
+    const add = KEEP_OUT.filter((p) => !have.has(p));
+    if (add.length) await writeFile(gi, cur + (cur && !cur.endsWith("\n") ? "\n" : "") + add.join("\n") + "\n");
+    // Files an older desk already committed stay tracked: untracking them here would delete them on
+    // every other host that pulls this repo (it carries sessions between hosts).
     this.st.pending = (await this.git("status", "--porcelain")).trim().length > 0;
   }
 

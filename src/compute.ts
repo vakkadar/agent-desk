@@ -163,11 +163,47 @@ export interface ComputeResult { type: "compute_out"; id: string; action: string
 const MAX_OUT = 20_000;
 const clip = (s: string) => redact(s.length > MAX_OUT ? s.slice(0, MAX_OUT) + "\n… (cut)" : s).text;
 
+/** The Compute chat: a built-in source (admin only) with one Claude thread per machine. */
+export const COMPUTE_ID = "compute";
+
+/**
+ * CLAUDE.md for the Compute chat's folder: what each machine is and how to reach it. Claude reads
+ * it at the start of every session there; prompts arrive as `compute[<machine id>]: <text>`.
+ */
+export function computeBrief(ms: Machine[]): string {
+  const row = (m: Machine) => [
+    `- **${m.id}** (${m.label}, ${m.os}${m.group ? ", " + m.group : ""})`,
+    m.ssh ? `ssh \`${m.ssh}\`` : "no ssh",
+    m.tailscale ? `tailnet name \`${m.tailscale}\`` : "",
+    m.haPower ? `power via Home Assistant entity \`${m.haPower}\` (Compute menu)` : "",
+    m.hostingerVm ? `Hostinger VPS ${m.hostingerVm} (Compute menu)` : "",
+    m.godaddy ? "GoDaddy domains account (Compute menu)" : "",
+  ].filter(Boolean).join(" · ");
+  return `# Compute chat
+
+You help run the machines below from the agent desk's Compute perspective. Each prompt starts
+with \`compute[<machine id>]:\`: that is the machine the person is looking at. \`compute[all]:\`
+means no machine in particular.
+
+## Rules
+- Reach machines with \`ssh -o BatchMode=yes -o ConnectTimeout=8 <target> '<command>'\`. Read-only
+  checks (uptime, disk, logs, services, updates available) are fine; say what you ran.
+- Ask in chat before anything that changes a machine: reboot, shutdown, installs, upgrades, deleting,
+  editing config, restarting services. Prefer the Compute menu buttons for power.
+- Never print, copy or read secrets (\`~/.config/agent-desk/secrets.toml\`, \`.env\` files, tokens, keys).
+- Keep answers short: what you found, what you suggest.
+
+## Machines (from compute.toml)
+${ms.map(row).join("\n") || "(none configured)"}
+`;
+}
+
 export class Compute {
   private fetch: Fetch;
   private exec: Exec;
   private secrets: () => Secrets;
-  private machines: () => Machine[];
+  /** compute.toml, read fresh on every call (throws on a bad file). */
+  readonly machines: () => Machine[];
 
   constructor(dataDir: string, deps: ComputeDeps = {}) {
     this.fetch = deps.fetch ?? ((u, i) => fetch(u, { ...i, signal: AbortSignal.timeout(20_000) }));

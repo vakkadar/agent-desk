@@ -108,7 +108,7 @@ code { font: 12.5px var(--mono); background: var(--sunk); padding: 1px 5px; bord
 #termOverlay { position: absolute; top: 8px; right: 14px; padding: 2px 10px; border-radius: 6px; background: var(--panel); border: 1px solid var(--line2); color: var(--warn); font-size: 12px; z-index: 2; }
 #termOverlay[hidden] { display: none; }
 @media (max-width: 760px) { #termPanel { top: 0; height: auto !important; } #termGrip { display: none; } }
-/* dialogs from the classic desk: health, sessions, schedules */
+/* dialogs from desk2-extras.ts: health, sessions, schedules */
 dialog.dlg { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--pop); width: min(520px, calc(100vw - 32px)); padding: 14px 16px; }
 dialog.dlg::backdrop { background: rgba(0, 0, 0, 0.4); }
 dialog.dlg .hhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -145,6 +145,8 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .cmp .mh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cmp .mh b { font-size: 15px; }
 .cmp .agrp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cmp .cchat { display: flex; gap: 8px; align-items: flex-end; }
+.cmp .cchat textarea { flex: 1; min-height: 56px; resize: vertical; font: inherit; }
 .cmp .agrp > .lbl { font-size: 11.5px; color: var(--mute); width: 52px; flex: none; text-transform: uppercase; letter-spacing: .04em; }
 .cmp .btn.armed { background: var(--red, #c0392b); color: #fff; border-color: transparent; }
 .cmp pre { margin: 0; max-height: 360px; overflow: auto; font-size: 12px; background: var(--sunk); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; }
@@ -364,7 +366,7 @@ const THREADS = {
   "desk-dev": [{ id: "code-1", title: "Restart gate after tests", state: "working", age: "now", kind: "code", desk: true, ctx: 18, tok: "28k" }, { id: "code-2", title: "Desk perspective in desk2", state: "done", age: "1h", kind: "code", desk: true, ctx: 31, tok: "54k" }],
 };
 // Compute perspective: machines and hosting accounts (live: compute_state from <data>/compute.toml).
-const COMPUTE = { sel: "hp", out: {}, arm: null, error: "", machines: [
+const COMPUTE = { sel: "hp", out: {}, arm: null, error: "", draft: {}, chat: {}, machines: [
   { id: "hp", label: "HP desktop", group: "Home", os: "linux", online: true, ip: "100.99.174.32", power: "on", actions: [{ id: "ha:on", label: "Power on", group: "power" }, { id: "ha:off", label: "Power off", group: "power", confirm: true }, { id: "ssh:uptime", label: "Uptime", group: "ssh" }, { id: "ssh:disk", label: "Disk", group: "ssh" }, { id: "ssh:reboot", label: "Reboot", group: "ssh", confirm: true }] },
   { id: "imac-linux", label: "iMac · Linux", group: "iMac", os: "linux", online: false, lastSeen: "62d", actions: [{ id: "wol", label: "Wake (LAN)", group: "power" }, { id: "ssh:uptime", label: "Uptime", group: "ssh" }, { id: "cmd:0", label: "Boot macOS next", group: "ssh", confirm: true }] },
   { id: "imac-mac", label: "iMac · macOS", group: "iMac", os: "macos", note: "imac-mac is not on the tailnet", actions: [{ id: "ssh:uptime", label: "Uptime", group: "ssh" }] },
@@ -397,7 +399,25 @@ function computePanel() {
     ${m.note ? `<div class="note">${esc(m.note)}</div>` : ""}
     ${grp("power", "Power")}${grp("ssh", "SSH")}${grp("api", "API")}
     ${m.actions.some((a) => a.param) ? `<div class="agrp"><span class="lbl"></span><input id="cparamIn" class="inp mono" style="max-width:260px;height:30px" placeholder="domain, e.g. sanatanadharma.cloud" value="${esc(COMPUTE.param ?? "")}" oninput="COMPUTE.param=this.value"></div>` : ""}
-    ${!m.actions.length ? `<div class="mute" style="font-size:12.5px">${m.os === "ios" ? "Status only: an iPhone can't be switched on or off from here." : "No actions: add ssh, ha_power, wake_mac, hostinger_vm or godaddy in compute.toml."}</div>` : ""}</div>${outs}</div>`;
+    ${!m.actions.length ? `<div class="mute" style="font-size:12.5px">${m.os === "ios" ? "Status only: an iPhone can't be switched on or off from here." : "No actions: add ssh, ha_power, wake_mac, hostinger_vm or godaddy in compute.toml."}</div>` : ""}</div>${outs}${computeChatBox(m)}${computeChat(m)}</div>`;
+}
+// Compute chat: Claude on the desk's host, one conversation per machine; it reaches the machine over ssh
+// and asks before changing anything. Ctrl/Cmd+Enter sends.
+function computeChatBox(m) {
+  return `<div class="cchat"><textarea id="cmpMsg" class="inp" rows="2" placeholder="Ask about ${esc(m.label)}: why is it slow, what's using the disk, are updates pending…"
+    oninput="COMPUTE.draft[COMPUTE.sel]=this.value" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();computeSend()}">${esc(COMPUTE.draft[m.id] ?? "")}</textarea>
+    <button class="btn pri sm" data-act="computeSend" title="Ctrl/Cmd+Enter">Send</button></div>`;
+}
+// Demo transcript; desk2-live.js replaces both with the machine's thread from the desk.
+function computeChat(m) {
+  return (COMPUTE.chat[m.id] || []).map((u) => `<div class="turn"><div class="who"><b>Claude</b></div><div class="body">${esc(u.a)}</div></div><div class="turn me"><div class="who">you</div><div class="body">${esc(u.q)}</div></div>`).join("");
+}
+function computeSend() {
+  const v = (COMPUTE.draft[COMPUTE.sel] ?? "").trim();
+  if (!v) return toast("Type a message");
+  (COMPUTE.chat[COMPUTE.sel] ||= []).unshift({ q: v, a: "(demo) On a live desk, Claude answers here and runs read-only checks over ssh; it asks before changing anything." });
+  COMPUTE.draft[COMPUTE.sel] = "";
+  renderMid();
 }
 // Demo answer; desk2-live.js replaces it with compute_run over /ws.
 function computeRun(id, action, param) {
@@ -607,7 +627,10 @@ function renderUsage() {
 function renderMid() {
   const t = thr();
   const v = VIEWS[S.view];
+  // The Compute chat box survives re-renders (state refreshes, streamed replies): keep focus and caret.
+  const c = document.activeElement?.id === "cmpMsg" ? [$("cmpMsg").selectionStart, $("cmpMsg").selectionEnd] : null;
   $("mid").innerHTML = v ? v() : S.persp === "compute" ? computePanel() : tline(t) + (S.persp === "desk" && place()?.deskdev ? deskPanel(t) : "") + composer(t) + out(t);
+  if (c && $("cmpMsg")) { $("cmpMsg").focus(); $("cmpMsg").setSelectionRange(c[0], c[1]); }
   const ta = $("msg");
   if (ta) {
     ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
@@ -694,7 +717,7 @@ function menu(kind, anchor) {
       it("Notes", "day by day, all places", 'data-act="notes"') + it("History", "search every turn", 'data-act="history"') + it("Usage", "tokens and cost", 'data-act="usage"') + it("Schedules", "scheduled prompts", 'data-act="schedules"') +
       (dv() ? it("Terminal", "live herdr session, bottom panel", 'data-act="terminalPanel"') + it("Sessions", "named herdr sessions: open, close, keep", 'data-act="sessions"') : "") +
       it(ALERTS(), "phone / desktop alerts when a turn ends or needs you", 'data-act="alerts"') + it("Health", "desk, herdr, agent, disk, git", 'data-act="health"') +
-      it("Light / dark", "follows the system until you pick", 'data-act="theme"') + it("Classic desk", "the old layout", 'data-act="classic"');
+      it("Light / dark", "follows the system until you pick", 'data-act="theme"');
   }
   m.innerHTML = h; m.classList.add("on");
   const r = anchor.getBoundingClientRect(), w = m.offsetWidth, hgt = m.offsetHeight;
@@ -758,9 +781,9 @@ function act(a, el) {
     case "closeFile": S.file = null; renderFiles(); return renderRight();
     case "closeView": S.view = "thread"; return render();
     case "computeRefresh": return computeRefresh();
+    case "computeSend": return computeSend();
     case "needs": { const n = NEEDS[0]; return go(n.place, n.thread); }
     case "theme": closeMenu(); return theme();
-    case "classic": location.href = "/index.html" + location.hash; return;
     case "notes": return view("notes");
     case "history": return view("history");
     case "attachProject": return view("attach");
@@ -857,7 +880,7 @@ document.addEventListener("pointerdown", (e) => {
   if (q.get("open") && phone()) openThreadScreen(true); }
 render();
 </script>
-<!-- Reused from the classic desk (desk2-extras.ts): terminal panel and dialogs. The buttons are driven from menus. -->
+<!-- From desk2-extras.ts: terminal panel and dialogs. The buttons are driven from menus. -->
 <div hidden><button id="termBtn" type="button"></button><button id="healthBtn" type="button"></button><button id="pushBtn" type="button"></button></div>
 <div id="termPanel" hidden>
   <div id="termGrip" title="Drag to resize"></div>

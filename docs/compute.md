@@ -93,6 +93,15 @@ secret = "…"
 
 The desk refuses the file if group/others can read it. Another path: `AGENT_DESK_SECRETS`.
 
+### Encrypted backup
+
+`deploy/secrets-vault.sh seal` packs `secrets.toml`, `<data>/desk.toml` and `<data>/compute.toml`
+into `<data>/vault/<hostname>.tar.gpg` (one per host): OpenPGP symmetric AES-256, passphrase stretched with
+iterated+salted SHA-512 (max count), MDC integrity. The desk data repo, shared by the hosts,
+commits that file (keep its remote private). On a new host: `open <data>/vault/<other-host>.tar.gpg`. `open` puts them back (mode 600, a changed old file kept as `.bak`), `list` shows
+what is inside. gpg asks for the passphrase itself; run it from a real terminal. Use 6+ random
+words: anyone with the repo can try passphrases offline, forever.
+
 ## Menus
 
 | Source | Entries |

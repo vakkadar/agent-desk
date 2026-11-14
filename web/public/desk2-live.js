@@ -2,13 +2,13 @@
 // Loaded after desk2.html's own script. If no desk answers (vite preview, file://), the page
 // stays on its demo data and says so. In live mode it mutates the page's data tables
 // (PLACES, THREADS, NEEDS, FILES, LINKS) in place and replaces out(), diffOf(), send(), act().
-// desk2-extras.ts (a module, so it runs before DOMContentLoaded) brings the classic desk's terminal,
+// desk2-extras.ts (a module, so it runs before DOMContentLoaded) brings the terminal,
 // alerts, Ask targets and dialogs as window.deskExtras; we connect after it, on DOMContentLoaded.
 (() => {
   "use strict";
   const L = { on: false, ws: null, events: [], lastSeq: 0, sources: [], features: [], files: {}, diffs: {}, review: {}, pair: {}, merge: [], pendingNew: null, retry: 500,
     role: null, notes: {}, notesDate: new Date().toISOString().slice(0, 10), usage: null, usageRange: "7d", hits: null, claude: null, atts: [], browse: null, prefill: null };
-  const X = () => window.deskExtras; // classic modules (desk2-extras.ts); absent in a plain static preview
+  const X = () => window.deskExtras; // shared modules (desk2-extras.ts); absent in a plain static preview
   window.deskLive = L;
   L.wantFile = new URLSearchParams(location.search).get("file"); // deep link: open once the thread's files arrive
   const tok = () => { try { const t = new URLSearchParams(location.hash.slice(1)).get("token"); if (t) localStorage.setItem("token", t); return t ?? localStorage.getItem("token") ?? undefined; } catch { return undefined; } };
@@ -49,13 +49,14 @@
   }
   function rebuild() {
     const fs = L.features;
-    PLACES.splice(0, PLACES.length, ...L.sources.map((s) => ({
+    const places = L.sources.filter((s) => s.id !== "compute"); // the Compute chat lives in the Compute perspective
+    PLACES.splice(0, PLACES.length, ...places.map((s) => ({
       id: s.id, name: s.id === "general" ? "General" : s.id === "desk-dev" ? "Desk dev" : s.location.split("/").filter(Boolean).pop() || s.id,
       machine: "hp", kind: s.id === "general" ? "general" : "project", deskdev: s.id === "desk-dev", src: s,
     })));
     for (const k of Object.keys(THREADS)) delete THREADS[k];
     NEEDS.splice(0);
-    for (const s of L.sources) {
+    for (const s of places) {
       THREADS[s.id] = Object.values(s.threads).filter((t) => !t.closed || S.thread === t.id).map((t) => {
         const ev = evsOf(s.id, t.id);
         const first = ev.find((e) => e.event.kind === "prompt");
@@ -73,7 +74,7 @@
       }).sort((a, b) => (a.kind === "ask" ? -1 : b.kind === "ask" ? 1 : 0));
       for (const t of THREADS[s.id]) {
         const done = new Set(evsOf(s.id, t.id).filter((e) => e.event.kind === "approval_result").map((e) => e.event.id));
-        for (const e of evsOf(s.id, t.id)) if (e.event.kind === "approval_request" && !done.has(e.event.id)) NEEDS.push({ place: s.id, thread: t.id, text: `${t.id} wants to use ${e.event.tool}`, id: e.event.id });
+        for (const e of evsOf(s.id, t.id)) if (e.event.kind === "approval_request" && !done.has(e.event.id)) NEEDS.push({ place: s.id, thread: t.id, text: `${t.id} wants to use ${e.event.tool}`, id: e.event.id, options: e.event.options });
       }
     }
     S.level = fs.includes("self") ? "power" : fs.includes("code") ? "developer" : "everyday";
@@ -90,7 +91,7 @@
   function onMsg(m) {
     if (m.type !== "welcome" && X()?.onMsg(m, L.events)) return;
     if (m.type === "welcome") {
-      L.on = true; L.retry = 500; L.demo = false; document.getElementById("demoPill")?.remove(); L.sources = m.sources; L.features = m.features ?? []; L.role = m.role; L.targets = m.targets ?? []; L.keyword = m.keyword;
+      L.on = true; L.retry = 500; L.demo = false; document.getElementById("demoPill")?.remove(); L.sources = m.sources; L.features = m.features ?? []; L.role = m.role; L.guestAsk = !!m.guestAsk; L.targets = m.targets ?? []; L.keyword = m.keyword;
       X()?.connect(wsSend, () => L.role === "action", m);
       document.getElementById("roPill")?.remove();
       if (m.role !== "action") document.querySelector(".brand")?.insertAdjacentHTML("beforeend", ' <button id="roPill" class="pill p-amber" data-act="signin" title="This browser has no desk token: you can read, not act">read-only · sign in</button>');
@@ -220,7 +221,10 @@
     const who0 = p.kind === "general" ? "Claude" : "Builder";
     const html = ts.map((u, i) => {
       const steps = u.steps.length ? `<details class="fold"><summary>${u.steps.length} steps${u.steps.some((s) => s.ok === false) ? " · some failed" : ""}</summary><div class="fb">${u.steps.slice(-40).map((s) => `<div class="step"><span class="ok">${s.ok === false ? "✗" : s.ok ? "✓" : "…"}</span>${esc(stepLabel(s))}</div>`).join("")}</div></details>` : "";
-      const asks = u.asks.filter((a) => !u.resolved.has(a.id)).map((a) => `<div class="ask"><div>Wants to use <code>${esc(a.tool)}</code>: <code>${esc(JSON.stringify(a.input).slice(0, 200))}</code></div><div class="acts"><button class="btn pri sm" data-approve="${esc(a.id)}|1">Allow</button><button class="btn sm" data-approve="${esc(a.id)}|0">Deny</button></div></div>`).join("");
+      const asks = u.asks.filter((a) => !u.resolved.has(a.id)).map((a) => `<div class="ask"><div>Wants to use <code>${esc(a.tool)}</code>: <code>${esc(JSON.stringify(a.input).slice(0, 200))}</code></div><div class="acts">${a.options
+        // A live Claude window's own prompt brings its options, answered by key; the desk's own approvals are Allow/Deny.
+        ? a.options.map((o) => `<button class="btn sm${o.allow ? " pri" : ""}" data-lans="${esc(t.id)}|${esc(a.id)}|${esc(o.key)}">${esc(o.label)}</button>`).join("")
+        : `<button class="btn pri sm" data-approve="${esc(a.id)}|1">Allow</button><button class="btn sm" data-approve="${esc(a.id)}|0">Deny</button>`}</div></div>`).join("");
       const review = i === 0 && rv && rv.state !== "none" && t.kind === "code" ? `<details class="fold dev"><summary><span class="dot" style="background:${rv.state === "clean" ? "var(--ok)" : "var(--amber)"}"></span>${esc(rv.text)}</summary><div class="fb">${rv.findings.map((f) => `<div class="rvl"><span class="sev ${f.severity === "medium" ? "med" : f.severity}">${f.severity === "medium" ? "med" : f.severity}</span><span>${f.file ? `<code>${esc(f.file)}${f.line ? ":" + f.line : ""}</code> ` : ""}${esc(f.text)} <b ${f.status === "verified" ? 'style="color:var(--ok)"' : f.status === "disputed" ? 'class="needs"' : ""}>${{ verified: "Fixed, re-checked.", claimed: "Builder says fixed; reviewer to re-check.", open: "Open.", disputed: "Disputed.", wontfix: "Won't fix." }[f.status]}</b>${f.note ? ` <span class="mute">${esc(f.note)}</span>` : ""}</span></div>`).join("")}<span class="mute" style="font-size:11.5px">Written by the desk from the reviewer's verdict file, not by the builder.</span></div></details>` : "";
       const merge = i === 0 && q ? `<div class="mute" style="font-size:12.5px">Merge queue: <b>${esc(q.state)}</b>${q.reason ? " · " + esc(q.reason) : ""}</div>` : "";
       if (u.error && !u.text.includes(u.error)) u.text += (u.text ? "\n\n" : "") + `⚠ ${u.state === "cancelled" ? "Stopped" : "Error"}: ${u.error}`;
@@ -236,6 +240,22 @@
   function liveSend() {
     const ta = $("msg"), v = ta?.value.trim();
     if (!v) return toast("Type a message");
+    const at = /^\s*attach:\s*(\S+)\s*$/i.exec(v); // "attach: <name>" opens that herdr session
+    if (at) {
+      if (L.role !== "action") return toast("Read-only: sign in to attach");
+      if (!L.features.includes("sessions")) return toast("Sessions are not part of your profile");
+      X()?.attachByName(at[1]); ta.value = ""; return;
+    }
+    if (L.role !== "action") {
+      // Read-only guest: the desk only takes questions to a browser-side Run on target in General.
+      if (!L.guestAsk) return toast("Read-only: sign in to send");
+      if (S.place !== "general") return toast("Guests can ask in General");
+      const target = X()?.targetChoice(v);
+      if (!X()?.isBrowserTarget(target?.id)) return toast("Read-only: pick a Run on target other than This host");
+      L.sent = { text: v, at: Date.now() };
+      wsSend({ type: "prompt", sourceId: "general", threadId: thr()?.id ?? "ask", text: v, target });
+      ta.value = ""; return;
+    }
     if (L.atts.some((a) => !a.path && !a.failed)) return toast("Still uploading…");
     const t = thr();
     // Extras every prompt carries: attachments (uploaded for this place), where Ask runs (General), a session PIN.
@@ -291,7 +311,9 @@
       case "close": closeMenu(); return wsSend({ type: "close", ...ids });
       case "compact": closeMenu(); return wsSend({ type: "prompt", ...ids, text: "/compact" });
       case "needs": { const n = NEEDS[0]; return n ? go(n.place, n.thread) : toast("Nothing needs you"); }
-      case "allow": case "deny": case "allowAlways": { const n = NEEDS.find((x) => x.place === S.place && x.thread === t?.id); if (!n) return toast("No open approval"); return wsSend({ type: "approve", id: n.id, allow: a !== "deny" }); }
+      case "allow": case "deny": case "allowAlways": { const n = NEEDS.find((x) => x.place === S.place && x.thread === t?.id); if (!n) return toast("No open approval");
+        if (n.options) { const o = n.options.find((x) => x.allow === (a !== "deny")); return o ? wsSend({ type: "live_answer", sourceId: n.place, threadId: n.thread, id: n.id, key: o.key }) : toast("Pick an option in the thread"); }
+        return wsSend({ type: "approve", id: n.id, allow: a !== "deny" }); }
     }
     return demoAct(a, el);
   }
@@ -366,6 +388,27 @@
   const demoCompute = { run: computeRun, refresh: computeRefresh };
   computeRun = (id, action, param) => (L.on ? wsSend({ type: "compute_run", id, action, param }) : demoCompute.run(id, action, param));
   computeRefresh = () => (L.on ? wsSend({ type: "compute_state" }) : demoCompute.refresh());
+  // Compute chat: the machine's thread in the built-in "compute" source (made by the desk on the first message).
+  const demoChat = { chat: computeChat, send: computeSend };
+  computeChat = (m) => {
+    if (!L.on) return demoChat.chat(m);
+    return turns("compute", m.id).map((u) => {
+      if (u.error && !u.text.includes(u.error)) u.text += (u.text ? "\n\n" : "") + `⚠ ${u.state === "cancelled" ? "Stopped" : "Error"}: ${u.error}`;
+      const steps = u.steps.length ? `<details class="fold"><summary>${u.steps.length} steps${u.steps.some((s) => s.ok === false) ? " · some failed" : ""}</summary><div class="fb">${u.steps.slice(-40).map((s) => `<div class="step mono">${esc(stepLabel(s))}</div>`).join("")}</div></details>` : "";
+      const asks = u.asks.filter((a) => !u.resolved.has(a.id)).map((a) => `<div class="ask"><div>Wants to use <code>${esc(a.tool)}</code>: <code>${esc(JSON.stringify(a.input).slice(0, 300))}</code></div><div class="acts"><button class="btn pri sm" data-approve="${esc(a.id)}|1">Allow</button><button class="btn sm" data-approve="${esc(a.id)}|0">Deny</button></div></div>`).join("");
+      const reply = u.text || u.steps.length || u.asks.length || u.state === "working" ? `<div class="turn"><div class="who"><span class="dot s-${u.state === "working" ? "working" : u.state === "done" ? "done" : "idle"}"></span><b>Claude</b><span class="meta">· ${u.state === "working" && !u.text ? "working…" : ago(u.ts)}</span></div><div class="body">${u.text ? `<div>${md(u.text)}</div>` : ""}${steps}${asks}</div></div>` : "";
+      const me = u.me != null ? `<div class="turn me"><div class="who">you</div><div class="body">${md(u.me)}</div></div>` : "";
+      return reply + me;
+    }).join("");
+  };
+  computeSend = () => {
+    if (!L.on) return demoChat.send();
+    const v = (COMPUTE.draft[COMPUTE.sel] ?? "").trim();
+    if (!v) return toast("Type a message");
+    wsSend({ type: "prompt", sourceId: "compute", threadId: COMPUTE.sel, text: v });
+    COMPUTE.draft[COMPUTE.sel] = "";
+    renderMid();
+  };
   setInterval(() => { if (L.on && S.compute && S.persp === "compute" && !document.hidden) wsSend({ type: "compute_state" }); }, 30_000);
   renderHistory = () => (L.on ? liveHistory() : demoViews.history());
   renderResume = () => (L.on ? liveResume() : demoViews.resume());
@@ -433,7 +476,7 @@
   act = (a, el) => (L.on ? liveAct(a, el) : demoAct(a, el));
   go = (p, t) => { const r = demoGo(p, t); if (L.on) refreshThread(); return r; };
   document.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-approve], [data-base], [data-cmd], [data-urange], [data-bdir], [data-resume], [data-unatt]");
+    const b = e.target.closest("[data-approve], [data-lans], [data-base], [data-cmd], [data-urange], [data-bdir], [data-resume], [data-unatt]");
     if (!b || !L.on) return;
     if (b.dataset.urange) { L.usageRange = b.dataset.urange; return renderMid(); }
     if (b.dataset.bdir) return wsSend({ type: "ls", tag: "browse", path: b.dataset.bdir, limit: 500 });
@@ -445,11 +488,12 @@
       wsSend({ type: "thread", sourceId: S.place, mode: S.persp === "design" ? "design" : "code", resume: id, fork: live === "1" });
       return render();
     }
+    if (b.dataset.lans) { const [threadId, id, key] = b.dataset.lans.split("|"); return wsSend({ type: "live_answer", sourceId: S.place, threadId, id, key }); }
     if (b.dataset.approve) { const [id, ok] = b.dataset.approve.split("|"); wsSend({ type: "approve", id, allow: ok === "1" }); }
     else if (b.dataset.base) setTimeout(refreshThread, 0);
     else if (b.dataset.cmd && b.dataset.cmd !== "/<command>" && thr()) { e.stopImmediatePropagation(); closeMenu(); wsSend({ type: "prompt", sourceId: S.place, threadId: thr().id, text: b.dataset.cmd }); }
   }, true);
-  // Links into a thread (alerts, the classic desk): #source=<id>&thread=<id>. Opened once, then dropped from the URL.
+  // Links into a thread (alerts, old bookmarks): #source=<id>&thread=<id>. Opened once, then dropped from the URL.
   function openHash(h) {
     const q = new URLSearchParams(String(h).slice(1)), src = q.get("source"), th = q.get("thread");
     if (!src || !th || !L.sources.some((x) => x.id === src && x.threads[th])) return;

@@ -1,5 +1,5 @@
-// Two pages: the classic desk (index.html) and desk2 (desk2.html). desk2's own UI is an inline
-// script; desk2-extras.ts bundles the classic modules it reuses (terminal, alerts, Ask targets, dialogs).
+// One page: desk2.html. Its own UI is an inline script; desk2-extras.ts bundles the modules it
+// shares (terminal, alerts, Ask targets, dialogs).
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
 
@@ -19,7 +19,6 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: resolve(import.meta.dirname, "index.html"),
         desk2: resolve(import.meta.dirname, "desk2.html"),
       },
     },

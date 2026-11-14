@@ -1,12 +1,12 @@
-// desk2: the classic desk's modules that desk2 reuses as they are, bundled by vite.
+// desk2: the shared UI modules (terminal, alerts, Ask targets, schedules, herdr sessions, health), bundled by vite.
 //   terminal (xterm over /pty), alerts (web push), Ask targets (Run on), schedules, herdr
 //   sessions and health dialogs, share-link prefill and attachment links.
 // desk2-live.js drives them through window.deskExtras once it is connected.
 import { initTerminal, openTerminal, toggleTerminal } from "./terminal";
 import { initPush, onPushKey, togglePush } from "./push";
 import { initSchedules, renderSchedules, showSchedules } from "./schedule";
-import { initHSessions, onHSessionError, onTrustNeeded, pinFor, renderHSessions, showHSessions } from "./hsessions";
-import { initTargets, onTargetGo, onTargetModels, setTargets, targetChoice } from "./targets";
+import { attachByName, initHSessions, onHSessionError, onTrustNeeded, pinFor, renderHSessions, showHSessions } from "./hsessions";
+import { initTargets, isBrowserTarget, onTargetGo, onTargetModels, setTargets, targetChoice } from "./targets";
 import { splitAttached, takePrefill } from "./attach";
 import "./health"; // binds #healthBtn and the #health dialog
 
@@ -42,7 +42,7 @@ const extras = {
     }
     return false;
   },
-  openTerminal, toggleTerminal, togglePush, showSchedules, showHSessions, pinFor, targetChoice, takePrefill, splitAttached,
+  openTerminal, toggleTerminal, togglePush, showSchedules, showHSessions, pinFor, targetChoice, isBrowserTarget, attachByName, takePrefill, splitAttached,
   health: () => document.querySelector<HTMLButtonElement>("#healthBtn")!.click(),
   pushLabel: () => pushBtn.textContent ?? "",
   /** Put the "Run on" bar into the General composer (it is re-rendered often; the bar is kept). */
