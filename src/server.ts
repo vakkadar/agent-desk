@@ -21,6 +21,7 @@ import type { Mode, Role } from "./types.js";
 import { aggregateUsage, readJournal } from "./usage.js";
 import { searchEvents } from "./search.js";
 import { NotesRecorder, readNotes } from "./notes.js";
+import { morningNote } from "./morning.js";
 import { onPtyClient, listSessions } from "./pty.js";
 import { DeskGit, gitStatus, setDeskGit } from "./git.js";
 import { randomUUID } from "node:crypto";
@@ -412,6 +413,11 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
     case "notes": {
       const date = String(m.date || new Date().toISOString().slice(0, 10));
       send({ type: "notes", date, rows: await readNotes(cfg.dataDir, date) });
+      return;
+    }
+    case "morning": {
+      // What the last working day left behind (src/morning.ts), shown atop today's notes.
+      send({ type: "morning", note: await morningNote(cfg.dataDir, new Date().toISOString().slice(0, 10)) });
       return;
     }
     case "note": {

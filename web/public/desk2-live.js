@@ -159,6 +159,8 @@
       toast("Folder trusted: Claude is starting");
     } else if (m.type === "pair_review") {
       toast(m.skeptic ? "Builder self-checks first; the reviewer follows" : "Reviewer asked to check the current diff");
+    } else if (m.type === "morning") {
+      L.morning = m.note; if (S.view === "notes") renderMid();
     } else if (m.type === "notes") {
       L.notes[m.date] = m.rows; if (S.view === "notes") renderMid();
     } else if (m.type === "usage") {
@@ -348,6 +350,7 @@
     const d = L.notesDate, rows = L.notes[d];
     if (rows === undefined && L.notesAsked !== d) { L.notesAsked = d; wsSend({ type: "notes", date: d }); }
     const shown = (rows ?? []).filter((r) => r.kind !== "prompt");
+    if (d === today() && !L.morningAsked) { L.morningAsked = true; wsSend({ type: "morning" }); }
     const row = (r) => `<div class="turn" style="max-width:none"><div class="who"><span class="mono">${hm(r.ts)}</span><b>${esc(r.source_id ? `${nameOf(r.source_id)} / ${r.thread_id}` : "you")}</b><span class="meta">${esc(r.kind)}</span></div><div class="body" style="padding:8px 12px">${
       r.kind === "response" ? `${r.prompt ? `<div class="mute">${esc(r.prompt.slice(0, 200))}</div>` : ""}<div>${md(r.summary ?? "")}</div>${r.files_changed?.length ? `<div class="mute" style="font-size:12px">files: ${esc(r.files_changed.join(", "))}</div>` : ""}<div class="mute" style="font-size:12px">${[r.outcome, r.duration_ms != null ? (r.duration_ms / 1000).toFixed(1) + " s" : "", `${r.tokens_in ?? 0}/${r.tokens_out ?? 0} tok`, r.cost != null ? "$" + r.cost.toFixed(4) : ""].filter(Boolean).join(" · ")}</div>`
       : r.kind === "tool" || r.kind === "approval" ? `<span class="mono">${esc(r.tool ?? "")}</span> ${esc(r.detail ?? "")}` : md(r.summary ?? "")}</div></div>`;
@@ -355,7 +358,19 @@
       <div class="crow"><div class="seg"><button data-act="notesPrev" title="Day before">‹</button><button data-act="notesToday" class="${d === today() ? "on" : ""}">${d === today() ? "Today" : d}</button><button data-act="notesNext" title="Day after">›</button></div></div>
       <textarea id="noteTa" class="inp" style="height:auto;min-height:64px;padding:8px 10px" placeholder="Add a note (turns are recorded automatically)"></textarea>
       <div class="crow"><span class="sp"></span><button class="btn pri" data-act="note">Add note</button></div></div></div>
+      ${d === today() ? morningCard(L.morning) : ""}
       <div class="out">${rows === undefined ? '<div class="mute">Loading…</div>' : shown.length ? shown.slice().reverse().map(row).join("") : `<div class="empty"><span>Nothing on ${d}. Every turn is recorded here; add your own notes above.</span></div>`}</div>`;
+  }
+  function morningCard(m) {
+    if (!m?.date) return "";
+    const when = m.date === day(today(), -1) ? "Yesterday" : m.date;
+    const th = m.threads.slice(0, 8).map((t) => `<div style="margin:6px 0"><b>${esc(nameOf(t.sourceId))} / ${esc(t.threadId)}</b> <span class="mute mono" style="font-size:12px">${t.turns} turns · ${hm(t.lastAt)}${t.outcome && !t.outcome.startsWith("ok") ? " · " + esc(t.outcome.split(":")[0]) : ""}</span>
+      ${t.lastPrompt ? `<div class="mute">${esc(t.lastPrompt)}</div>` : ""}<div>${esc(t.lastSummary)}</div>${t.files.length ? `<div class="mute" style="font-size:12px">files: ${esc(t.files.map((f) => f.split("/").pop()).join(", "))}</div>` : ""}</div>`).join("");
+    const more = m.threads.length > 8 ? `<div class="mute">+${m.threads.length - 8} more threads</div>` : "";
+    const pick = m.pickUp.length ? `<div style="margin-top:8px"><b>Pick up</b>${m.pickUp.map((p) => `<div>· ${esc(p)}</div>`).join("")}</div>` : "";
+    const nt = m.notes.length ? `<div style="margin-top:8px"><b>Your notes</b>${m.notes.map((n) => `<div>· ${esc(n)}</div>`).join("")}</div>` : "";
+    const foot = [`${m.threads.length} threads`, m.commits ? `${m.commits} desk commits` : "", m.cost ? "$" + m.cost.toFixed(2) : ""].filter(Boolean).join(" · ");
+    return `<div class="box"><div class="vform"><div><b>☀ ${esc(when)}</b> <span class="mute" style="font-size:12px">${esc(foot)}</span></div>${pick}${th}${more}${nt}</div></div>`;
   }
   function liveUsage() {
     const u = L.usage, r = L.usageRange;
