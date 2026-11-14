@@ -148,8 +148,11 @@
     } else if (m.type === "links") {
       LINKS.splice(0, LINKS.length, ...LINKS.filter((l) => l[3] !== m.sourceId), ...m.links.map((l) => [l.a, l.b, l.why, m.sourceId]));
       renderTree(); renderMid();
+    } else if (m.type === "pane_view") {
+      if (L.pv && m.sourceId === L.pv.sourceId && m.threadId === L.pv.threadId) { L.pv.data = m; drawPanes(); }
     } else if (m.type === "pair") {
       L.pair[m.sourceId] = m.pair;
+      if (L.pv && m.sourceId === L.pv.sourceId) pollPanes();
       if (L.wantTerm === m.sourceId && L.features.includes("terminal") && X()) { L.wantTerm = null; X().openTerminal(m.pair.session); }
       else if (m.attach) toast(`Pair open in herdr: ${m.attach.join(" ")}`);
     } else if (m.type === "pair_trust") {
@@ -318,6 +321,8 @@
         ta.focus(); const i = ta.value.indexOf("<what"); ta.setSelectionRange(i, i + 20); return; }
       case "merge": return wsSend({ type: "merge_enqueue", ...ids });
       case "terminal": L.wantTerm = S.place; return wsSend({ type: "pair_open", ...ids }); // pair in herdr, shown in the terminal panel
+      case "panes": closeMenu(); return openPanes();
+      case "panesOpen": if (!L.pv) return; toast("Starting the pair…"); return wsSend({ type: "pair_open", sourceId: L.pv.sourceId, threadId: L.pv.threadId });
       case "terminalPanel": closeMenu(); return X() ? X().toggleTerminal() : toast("Terminal needs the built desk (npm run build)");
       case "sessions": closeMenu(); return X()?.showHSessions();
       case "schedules": closeMenu(); return X()?.showSchedules();
@@ -349,6 +354,46 @@
         return wsSend({ type: "approve", id: n.id, allow: a !== "deny" }); }
     }
     return demoAct(a, el);
+  }
+
+  // ---------- pane view: the thread's builder | reviewer as herdr shows them (read-only), Claude/Codex switch ----------
+  function openPanes() {
+    const t = thr(), dl = $("panes");
+    if (!t || S.place === "general" || (t.kind && !["code", "design"].includes(t.kind) && t.id !== "ask")) return toast("Pane view is for a project's code or design thread");
+    const sub = (() => { try { return localStorage.getItem("pvSub") === "1"; } catch { return false; } })();
+    L.pv = { sourceId: S.place, threadId: t.id, subagents: sub, data: null, busy: {} };
+    $("panesTitle").textContent = `Panes · ${nameOf(S.place)} · ${t.id === "ask" ? "lead" : t.id}`;
+    $("panesBody").innerHTML = `<p class="mute">Reading the panes…</p>`;
+    dl.showModal();
+    pollPanes();
+    clearInterval(L.pvTimer);
+    L.pvTimer = setInterval(() => { if (!dl.open || document.hidden) return; pollPanes(); }, 1500);
+    dl.onclose = () => { clearInterval(L.pvTimer); L.pv = null; };
+  }
+  const pollPanes = () => L.pv && L.ws?.readyState === 1 && L.ws.send(JSON.stringify({ type: "pane_view", sourceId: L.pv.sourceId, threadId: L.pv.threadId, subagents: L.pv.subagents }));
+  function paneCard(p, agents, small) {
+    const opts = agents.length > 1 && !small ? `<select data-pv-role="${p.role}" title="Switch agent: the pane is replaced, the old agent stops">${agents.map((a) => `<option value="${a.id}"${a.id === p.agent ? " selected" : ""}>${esc(a.label)}</option>`).join("")}</select>` : "";
+    const lines = p.screen.replace(/\s+$/, "").split("\n");
+    return `<div class="pv"><div class="pv-h"><span class="hdot ${p.running ? "ok" : ""}" title="${p.running ? "agent running" : "back at the shell"}"></span><b title="${esc(p.label)}">${esc(p.label)}</b>${opts}</div><pre>${esc(lines.slice(small ? -24 : -60).join("\n")) || '<span class="mute">(empty)</span>'}</pre></div>`;
+  }
+  function drawPanes() {
+    const v = L.pv, m = v?.data, body = $("panesBody");
+    if (!m || !body) return;
+    const keepScroll = [...body.querySelectorAll("pre")].map((e) => e.scrollHeight - e.scrollTop - e.clientHeight < 8);
+    const mine = m.panes.filter((p) => p.tab === m.threadId), others = m.panes.filter((p) => p.tab !== m.threadId);
+    const bar = `<div class="pv-bar"><label><input type="checkbox" id="pvSub"${v.subagents ? " checked" : ""}> Subagents: the project's other threads</label><span class="mute">read-only view of herdr; type in the thread box, answer questions on their cards</span></div>`;
+    body.innerHTML = bar + (mine.length
+      ? `<div class="pv-grid">${mine.map((p) => paneCard(p, m.agents, false)).join("")}</div>`
+      : `<p>No pair is open for this thread yet. <button type="button" data-act="panesOpen">Open the pair</button></p>`) +
+      (v.subagents ? (others.length ? `<div class="pv-grid sub">${others.map((p) => paneCard(p, m.agents, true)).join("")}</div>` : `<p class="mute">No other thread of this project has panes open.</p>`) : "");
+    body.querySelectorAll("pre").forEach((e, i) => { if (keepScroll[i] !== false) e.scrollTop = e.scrollHeight; });
+    $("pvSub").onchange = (e) => { v.subagents = e.target.checked; lsSet("pvSub", v.subagents ? "1" : "0"); pollPanes(); };
+    body.querySelectorAll("select[data-pv-role]").forEach((sel) => sel.onchange = () => {
+      const role = sel.dataset.pvRole, label = sel.selectedOptions[0].textContent;
+      if (!confirm(`Switch the ${role} pane to ${label}? The agent running there now stops.`)) { sel.value = mine.find((p) => p.role === role)?.agent; return; }
+      toast(`Switching the ${role} to ${label}…`);
+      wsSend({ type: "pane_agent", sourceId: v.sourceId, threadId: v.threadId, role, agent: sel.value });
+    });
   }
 
   // ---------- views: notes, usage, history, add project, resume, sign in ----------

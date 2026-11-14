@@ -17,6 +17,7 @@ import type { AskCards, CardAnswer } from "./ask-card.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pairModels, type ModelMap } from "./models.js";
+import { AGENT_IDS, type AgentInfo } from "./agents.js";
 import { deliverable, ensureResearchDir, openPr, readResearch, research } from "./branches.js";
 
 export interface Desk2Ctx {
@@ -30,6 +31,7 @@ export interface Desk2Ctx {
   previews?: DeskPreviews;
   cards?: AskCards; // questions agents in pair panes are waiting on
   models?: ModelMap; // [model] in desk.toml: builder/reviewer models per activity
+  agents?: () => AgentInfo[]; // installed coding agents, for the pane view's Claude/Codex switch
 }
 
 /** What the Desk perspective shows: apply history (newest first) and running previews. */
@@ -217,6 +219,31 @@ export async function desk2Action(m: any, c: Desk2Ctx): Promise<boolean> {
       // Related threads in a project: started from, mail, mentions.
       const rec = need(c.store.get(String(m.sourceId)), "source");
       c.send({ type: "links", sourceId: rec.id, links: links(rec, await c.events()) });
+      return true;
+    }
+    case "pane_view": {
+      // Pane view: the thread's builder | reviewer as they look now; with subagents, the project's other tabs too.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      const tab = m.threadId && m.threadId !== "ask" ? String(m.threadId) : "lead";
+      const panes = await c.pairs.view(rec.id, m.subagents === true ? undefined : [tab]);
+      const models = c.models ?? {};
+      for (const p of panes) if (p.agent === "claude") {
+        const pm = pairModels(models, rec.id, p.tab, rec.threads[p.tab]?.mode);
+        p.label += ` (${p.role === "builder" ? pm.builder : pm.reviewer})`;
+      }
+      c.send({ type: "pane_view", sourceId: rec.id, threadId: tab, subagents: m.subagents === true, panes, agents: c.agents?.() ?? [] });
+      return true;
+    }
+    case "pane_agent": {
+      // Claude/Codex switch for one pane of the thread's pair.
+      const rec = need(c.store.get(String(m.sourceId)), "source");
+      if (rec.kind !== "local") throw new Error("a pair needs a local project folder");
+      const tab = m.threadId && m.threadId !== "ask" ? String(m.threadId) : "lead";
+      const role = m.role === "reviewer" ? "reviewer" : "builder";
+      if (!AGENT_IDS.includes(m.agent)) throw new Error(`unknown agent ${String(m.agent)}`);
+      const dir = tab === "lead" ? rec.location : threadDir(rec, tab);
+      const pair = await c.pairs.swapAgent(rec.id, tab, role, m.agent, dir, pairModels(c.models ?? {}, rec.id, tab, rec.threads[tab]?.mode));
+      c.send({ type: "pair", sourceId: rec.id, pair });
       return true;
     }
     case "pair_get": {

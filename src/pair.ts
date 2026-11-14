@@ -13,7 +13,7 @@ import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { AgentStore, agentCommand, type AgentId } from "./agents.js";
+import { AgentStore, agentCommand, agentLabel, type AgentId } from "./agents.js";
 
 const exec = promisify(execFile);
 
@@ -36,6 +36,10 @@ export interface PairRec {
 }
 
 type Role = "builder" | "reviewer";
+/** One pane in the in-page pane view. running: an agent is up (not back at the shell prompt). */
+export interface PaneView { tab: string; role: Role; pane: string; agent: AgentId; label: string; screen: string; running: boolean }
+/** Pane title in herdr and in the page: "code-2 · builder · Claude Code". */
+export const paneLabel = (tab: string, role: Role, agent: AgentId) => `${tab} · ${role} · ${agentLabel(agent)}`;
 const ROLES: Role[] = ["builder", "reviewer"];
 const TRUST = /Yes, I trust this folder/;
 /** The pane's agent has exited and its shell is back: last non-empty line is a prompt ("user@host:dir$"). */
@@ -159,6 +163,8 @@ export class Pairs {
     const cmd = commands(bAgent, rAgent, models, pick.paths);
     if (freshBuilder) await this.herdr(session, ["pane", "run", builder, cmd.builder]); // never type into a running agent
     await this.herdr(session, ["pane", "run", reviewer, cmd.reviewer]);
+    await this.herdr(session, ["pane", "rename", builder, paneLabel(tab, "builder", bAgent)]).catch(() => {});
+    await this.herdr(session, ["pane", "rename", reviewer, paneLabel(tab, "reviewer", rAgent)]).catch(() => {});
     rec.tabs[tab] = { tab: tabId, builder, reviewer, builderAgent: bAgent, reviewerAgent: rAgent };
     this.put(rec);
     return rec;
@@ -227,6 +233,44 @@ export class Pairs {
   private async screen(session: string, pane: string): Promise<string> {
     const s = await this.herdr(session, ["pane", "read", pane, "--source", "visible"]).catch(() => "");
     return typeof s === "string" ? s : JSON.stringify(s ?? "");
+  }
+
+  /** The panes of the given tabs (all open tabs when none given): which agent runs where and what it shows now. */
+  async view(sourceId: string, tabs?: string[]): Promise<PaneView[]> {
+    const rec = this.get(sourceId);
+    if (!rec) return [];
+    const out: PaneView[] = [];
+    for (const name of tabs ?? Object.keys(rec.tabs)) {
+      const t = rec.tabs[name];
+      if (!t) continue;
+      for (const role of ROLES) {
+        const agent = (role === "builder" ? t.builderAgent ?? "claude" : t.reviewerAgent ?? rec.reviewerAgent);
+        const screen = await this.screen(rec.session, t[role]);
+        out.push({ tab: name, role, pane: t[role], agent, label: paneLabel(name, role, agent), screen, running: !atShell(screen) });
+      }
+    }
+    return out;
+  }
+
+  /** Switch the agent in one pane of a tab (Claude ⇄ Codex …): its pane is replaced, the layout stays builder | reviewer. */
+  async swapAgent(sourceId: string, tab: string, role: Role, agent: AgentId, cwd: string, models: PairModels): Promise<PairRec> {
+    const rec = this.get(sourceId);
+    const t = rec?.tabs[tab];
+    if (!rec || !t) throw new Error(`no ${tab} pair open for ${sourceId}`);
+    const pick = this.pick();
+    const path = pick.paths[agent];
+    if (!path) throw new Error(`${agentLabel(agent)} is not installed here`);
+    const other: Role = role === "builder" ? "reviewer" : "builder";
+    // The new pane goes right of the other one; a new builder then swaps back to the left.
+    const fresh: string = (await this.herdr(rec.session, ["pane", "split", t[other], "--direction", "right", "--cwd", cwd])).pane.pane_id;
+    await this.herdr(rec.session, ["pane", "close", t[role]]).catch(() => {});
+    if (role === "builder") await this.herdr(rec.session, ["pane", "swap", "--source-pane", fresh, "--target-pane", t.reviewer]).catch(() => {});
+    await this.herdr(rec.session, ["pane", "run", fresh, agentCommand(agent, path, models[role])]);
+    await this.herdr(rec.session, ["pane", "rename", fresh, paneLabel(tab, role, agent)]).catch(() => {});
+    t[role] = fresh;
+    if (role === "builder") t.builderAgent = agent; else t.reviewerAgent = agent;
+    this.put(rec);
+    return rec;
   }
 
   /** Close one thread's tab (its two agents stop). The project session stays. */

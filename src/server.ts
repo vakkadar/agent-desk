@@ -387,14 +387,14 @@ async function handleAction(m: any, send: (m: unknown) => void, features: Set<Fe
   if (String(m.type).startsWith("hsession_") && m.name != null && selfSession(String(m.name))) needFeature(features, "self");
   if (m.type === "thread") needFeature(features, m.mode === "code" ? "code" : "design");
   if (m.type === "mail" || m.type === "links") needFeature(features, "design");
-  if (/^(pair|merge)_|^files$|^file_diff$|^review$|^branch$|^research_read$|^pr_open$/.test(String(m.type))) needFeature(features, "code");
+  if (/^(pair|pane|merge)_|^files$|^file_diff$|^review$|^branch$|^research_read$|^pr_open$/.test(String(m.type))) needFeature(features, "code");
   if (String(m.type).startsWith("desk_")) needFeature(features, "self");
   if (String(m.type).startsWith("compute")) {
     needFeature(features, "compute");
     if (m.type === "compute_state") return send(await compute.state());
     if (m.type === "compute_run") return send(await compute.run(String(m.id), String(m.action), String(m.param ?? "")));
   }
-  if (await desk2Action(m, { store, pairs, send, cards: askCards, models: cfg.model, mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
+  if (await desk2Action(m, { store, pairs, send, cards: askCards, models: cfg.model, agents: () => agentStore.agents().filter((a) => a.installed), mergeQueue, applies, previews, seesSelf: seesSelf(features), events: async () => { await bus.flush(); return readJournal(join(cfg.dataDir, ".index", "events.jsonl")); } })) return;
   switch (m.type) {
     case "ls": {
       // Directory autocomplete for the attach form: dirs under the typed prefix.

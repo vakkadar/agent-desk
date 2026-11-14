@@ -12,6 +12,7 @@ function fakeHerdr() {
   const panes = new Set<string>();
   const runs: [string, string][] = [];
   const screens = new Map<string, string>();
+  const labels = new Map<string, string>();
   let n = 0;
   const pane = () => { const id = `w1:p${++n}`; panes.add(id); return id; };
   const h: Herdr = async (_s, a) => {
@@ -34,10 +35,13 @@ function fakeHerdr() {
     if (k === "pane split") return { pane: { pane_id: pane() } };
     if (k === "pane run") { runs.push([a[2], a[3]]); return null; }
     if (k === "pane read") return screens.get(a[2]) ?? "";
+    if (k === "pane close") { panes.delete(a[2]); runs.push([a[2], "close"]); return null; }
+    if (k === "pane swap") { runs.push([a[a.indexOf("--source-pane") + 1], `swap:${a[a.indexOf("--target-pane") + 1]}`]); return null; }
+    if (k === "pane rename") { labels.set(a[2], a.slice(3).join(" ")); return null; }
     if (k === "pane send-text" || k === "pane send-keys") { runs.push([a[2], `${a[1]}:${a.slice(3).join(" ")}`]); return null; }
     throw new Error("unexpected " + a.join(" "));
   };
-  return { h, runs, panes, tabs, screens };
+  return { h, runs, panes, tabs, screens, labels };
 }
 
 const dir = () => mkdtempSync(join(tmpdir(), "pair-"));
@@ -159,4 +163,36 @@ test("reopen restarts an agent that fell back to its shell; sendTo never types i
   f.screens.set(t.builder, "> ");
   await p.sendTo("s1", "code-1", "builder", "fix F1");
   assert.deepEqual(f.runs.slice(1).map((r) => r[1]), ["send-text:fix F1", "send-keys:enter"]);
+});
+
+test("pane view: labelled panes, running or back at the shell; all tabs for subagents", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, cx);
+  await p.open("s", "/x");
+  await p.open("s", "/x/wt", "code-2");
+  assert.equal(f.labels.get("w1:p2"), "lead · reviewer · Codex");
+  f.screens.set("w1:p1", "> working");
+  f.screens.set("w1:p2", "me@box:~/x$");
+  const lead = await p.view("s", ["lead"]);
+  assert.deepEqual(lead.map((v) => [v.label, v.running]), [["lead · builder · Claude Code", true], ["lead · reviewer · Codex", false]]);
+  assert.equal((await p.view("s")).length, 4);
+  assert.deepEqual(await p.view("nope"), []);
+});
+
+test("swapAgent: new pane replaces the old, builder stays on the left, record updated", async () => {
+  const f = fakeHerdr();
+  const p = new Pairs(dir(), f.h, noServer, () => ({ builder: "claude", reviewer: "claude", paths: { claude: "claude", codex: "/c/codex" } }));
+  await p.open("s", "/x");
+  f.runs.length = 0;
+  let r = await p.swapAgent("s", "lead", "reviewer", "codex", "/x", { builder: "sonnet", reviewer: "opus" });
+  assert.deepEqual(r.tabs.lead.reviewer, "w1:p3");
+  assert.equal(r.tabs.lead.reviewerAgent, "codex");
+  assert.deepEqual(f.runs, [["w1:p2", "close"], ["w1:p3", "/c/codex"]]);
+  f.runs.length = 0;
+  r = await p.swapAgent("s", "lead", "builder", "codex", "/x", { builder: "sonnet", reviewer: "opus" });
+  assert.deepEqual([r.tabs.lead.builder, r.tabs.lead.builderAgent], ["w1:p4", "codex"]);
+  assert.deepEqual(f.runs, [["w1:p1", "close"], ["w1:p4", "swap:w1:p3"], ["w1:p4", "/c/codex"]]);
+  assert.equal(p.get("s")!.tabs.lead.builderAgent, "codex");
+  await assert.rejects(p.swapAgent("s", "lead", "builder", "opencode", "/x", { builder: "sonnet", reviewer: "opus" }), /not installed/);
+  await assert.rejects(p.swapAgent("s", "code-9", "builder", "codex", "/x", { builder: "s", reviewer: "o" }), /no code-9 pair/);
 });
