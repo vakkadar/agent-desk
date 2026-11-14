@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Desk" />
 <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)" />
 <meta name="theme-color" content="#0e1014" media="(prefers-color-scheme: dark)" />
-<script>try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
+<script>try { const d = document.documentElement.dataset, t = localStorage.getItem("theme"); if (t === "light" || t === "dark") d.theme = t; const l = JSON.parse(localStorage.getItem("look") || "{}"); for (const k of ["accent", "density", "layout"]) if (typeof l[k] === "string") d[k] = l[k]; } catch {}</script>
 <style>
 /* Desk (beta). Live when a desk server answers on /ws (desk2-live.js); made-up data otherwise.
    Rule: the working area is the text box + output. Everything else is summoned (Ctrl+K, a click) and goes away. */
@@ -21,7 +21,7 @@
   color-scheme: light;
   --bg: #f6f7f9; --panel: #ffffff; --card: #ffffff; --sunk: #eff1f4; --hover: #f1f2f5;
   --fg: #1b1d22; --mute: #697080; --line: #e4e6eb; --line2: #d3d6dd;
-  --acc: #4f46e5; --acc-fg: #fff; --acc-soft: rgba(79,70,229,.10);
+  --acc: var(--a-l, #4f46e5); --acc-fg: #fff; --acc-soft: color-mix(in srgb, var(--acc) 11%, transparent);
   --ok: #1a8f4c; --ok-soft: rgba(26,143,76,.12); --warn: #c23b3b; --warn-soft: rgba(194,59,59,.10);
   --amber: #b45309; --amber-soft: rgba(180,83,9,.12); --blue: #2563eb; --blue-soft: rgba(37,99,235,.10);
   --add-bg: #e6f6ea; --add-fg: #116b37; --del-bg: #fdeceb; --del-fg: #a12a2a;
@@ -33,7 +33,7 @@
   color-scheme: dark;
   --bg: #0e1014; --panel: #14171c; --card: #191c22; --sunk: #101318; --hover: #1d2027;
   --fg: #e6e8ec; --mute: #8f96a2; --line: #252a32; --line2: #353b46;
-  --acc: #8b8df9; --acc-fg: #0e1014; --acc-soft: rgba(139,141,249,.15);
+  --acc: var(--a-d, #8b8df9); --acc-fg: #0e1014; --acc-soft: color-mix(in srgb, var(--acc) 15%, transparent);
   --ok: #4ade80; --ok-soft: rgba(74,222,128,.13); --warn: #f27474; --warn-soft: rgba(242,116,116,.13);
   --amber: #fbbf24; --amber-soft: rgba(251,191,36,.13); --blue: #60a5fa; --blue-soft: rgba(96,165,250,.13);
   --add-bg: rgba(46,160,67,.18); --add-fg: #7ee2a0; --del-bg: rgba(248,81,73,.15); --del-fg: #ffa198;
@@ -44,7 +44,7 @@
     color-scheme: dark;
     --bg: #0e1014; --panel: #14171c; --card: #191c22; --sunk: #101318; --hover: #1d2027;
     --fg: #e6e8ec; --mute: #8f96a2; --line: #252a32; --line2: #353b46;
-    --acc: #8b8df9; --acc-fg: #0e1014; --acc-soft: rgba(139,141,249,.15);
+    --acc: var(--a-d, #8b8df9); --acc-fg: #0e1014; --acc-soft: color-mix(in srgb, var(--acc) 15%, transparent);
     --ok: #4ade80; --ok-soft: rgba(74,222,128,.13); --warn: #f27474; --warn-soft: rgba(242,116,116,.13);
     --amber: #fbbf24; --amber-soft: rgba(251,191,36,.13); --blue: #60a5fa; --blue-soft: rgba(96,165,250,.13);
     --add-bg: rgba(46,160,67,.18); --add-fg: #7ee2a0; --del-bg: rgba(248,81,73,.15); --del-fg: #ffa198;
@@ -163,6 +163,41 @@ header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0
 .need { position: relative; }
 .need b { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--amber); color: #fff; font-size: 11px; display: grid; place-items: center; padding: 0 4px; }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--acc-soft); color: var(--acc); font-weight: 700; display: grid; place-items: center; border: 0; }
+
+/* ---------- look: accent, density, layout (R menu → Appearance) ---------- */
+:root[data-accent="blue"] { --a-l: #2563eb; --a-d: #60a5fa; }
+:root[data-accent="teal"] { --a-l: #0f766e; --a-d: #2dd4bf; }
+:root[data-accent="rose"] { --a-l: #be185d; --a-d: #f472b6; }
+:root[data-accent="amber"] { --a-l: #b45309; --a-d: #fbbf24; }
+:root[data-density="compact"] body { font-size: 13px; line-height: 1.4; }
+:root[data-density="compact"] header { height: 40px; gap: 8px; }
+:root[data-density="compact"] .btn { min-height: 30px; padding: 0 10px; }
+:root[data-density="compact"] .btn.sm { min-height: 24px; }
+:root[data-density="compact"] .ib { min-width: 26px; height: 26px; }
+:root[data-density="compact"] .kbar { height: 30px; }
+:root[data-density="compact"] .persp button { height: 26px; padding: 0 10px; }
+:root[data-density="compact"] .row { min-height: 28px; padding-top: 3px; padding-bottom: 3px; }
+:root[data-density="compact"] .grp { padding-top: 7px; padding-bottom: 2px; }
+:root[data-layout="classic"] { --shadow: none; }
+:root[data-layout="classic"] header { background: var(--acc); color: var(--acc-fg); border-bottom-color: transparent; }
+:root[data-layout="classic"] header .ib, :root[data-layout="classic"] header .brand { color: var(--acc-fg); }
+:root[data-layout="classic"] header .ib:hover { background: rgba(255,255,255,.16); }
+:root[data-layout="classic"] .brand i { background: var(--acc-fg); }
+:root[data-layout="classic"] .kbar { background: rgba(255,255,255,.14); border-color: transparent; color: var(--acc-fg); }
+:root[data-layout="classic"] .persp { background: rgba(0,0,0,.14); border-color: transparent; }
+:root[data-layout="classic"] .persp button, :root[data-layout="classic"] .persp button .n { color: var(--acc-fg); }
+:root[data-layout="classic"] .persp button.on { background: var(--card); color: var(--fg); }
+:root[data-layout="classic"] .persp button.on .n { color: var(--mute); }
+:root[data-layout="classic"] header .btn { background: var(--card); color: var(--fg); }
+:root[data-layout="classic"] .avatar { background: var(--card); }
+:root[data-layout="classic"] :is(.btn, .kbar, .persp, .persp button, .relchip, dialog.dlg, .menu, code, .cmp .mcard) { border-radius: 3px; }
+:root[data-layout="classic"] .row { border-left: 0; border-bottom: 1px solid var(--line); }
+:root[data-layout="classic"] .row.on { box-shadow: inset 3px 0 0 var(--acc); }
+dialog.dlg.look .lrow { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 10px; padding: 7px 0; }
+dialog.dlg.look .persp { flex-wrap: wrap; justify-self: start; }
+dialog.dlg.look .persp button { height: 28px; color: var(--mute); }
+dialog.dlg.look .persp button.on { color: var(--fg); }
+dialog.dlg.look .sw { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
 
 /* ---------- three areas ---------- */
 .app { flex: 1; min-height: 0; display: flex; }
@@ -710,7 +745,7 @@ function palData(q) {
     ["New code thread", "", () => { switchPersp("code"); newThread("code"); }], ["New design thread", "", () => { switchPersp("design"); newThread("design"); }], ["New question (General)", "", () => go("general", null)],
     ["Notes: today", "", () => view("notes")], ["History", "", () => view("history")], ["Usage", "", () => view("usage")], ["Schedules", "", () => act("schedules")],
     ["Add a project (folder or URL)", "", () => view("attach")], ["Terminal", "", () => act("terminalPanel")], ["Sessions (herdr)", "", () => act("sessions")], ["Health", "", () => act("health")], ["Move project to another machine", "", () => toast("Save → kill → move → copy sessions → start")],
-    ["Settings: agents (builder, reviewer)", "", () => act("settings")], ["Toggle light / dark", "", theme], ["Toggle list", "Ctrl+B", () => act("toggleLeft")], ["Help: keys, prefixes, perspectives", "?", () => act("help")]];
+    ["Settings: agents (builder, reviewer)", "", () => act("settings")], ["Toggle light / dark", "", theme], ["Appearance: theme, accent, density, layout", "", () => act("look")], ["Toggle list", "Ctrl+B", () => act("toggleLeft")], ["Help: keys, prefixes, perspectives", "?", () => act("help")]];
   if (!cmd) for (const p of visiblePlaces()) for (const t of THREADS[p.id] || []) if (!qq || (t.id + " " + t.title + " " + p.name).toLowerCase().includes(qq)) out.push({ k: "thread", label: `${t.id} · ${t.title}`, s: p.name, run: () => go(p.id, t.id) });
   for (const [l, s, fn] of cmds) if (!qq || l.toLowerCase().includes(qq)) out.push({ k: "command", label: l, s, run: fn });
   if (!cmd && qq.length > 2) out.push({ k: "history", label: `Search all turns and transcripts for “${q}”`, s: "History", run: () => { S.q = q; view("history"); } });
@@ -745,7 +780,7 @@ function menu(kind, anchor) {
       it("Notes", "day by day, all places", 'data-act="notes"') + it("History", "search every turn", 'data-act="history"') + it("Usage", "tokens and cost", 'data-act="usage"') + it("Schedules", "scheduled prompts", 'data-act="schedules"') +
       (dv() ? it("Terminal", "live herdr session, bottom panel", 'data-act="terminalPanel"') + it("Sessions", "named herdr sessions: open, close, keep", 'data-act="sessions"') : "") +
       it(ALERTS(), "phone / desktop alerts when a turn ends or needs you", 'data-act="alerts"') + it("Health", "desk, herdr, agent, disk, git", 'data-act="health"') +
-      it("Light / dark", "follows the system until you pick", 'data-act="theme"') + it("Help", "keys, prefixes, perspectives  ?", 'data-act="help"');
+      it("Appearance", "theme, accent, density, layout", 'data-act="look"') + it("Help", "keys, prefixes, perspectives  ?", 'data-act="help"');
   }
   m.innerHTML = h; m.classList.add("on");
   const r = anchor.getBoundingClientRect(), w = m.offsetWidth, hgt = m.offsetHeight;
@@ -790,6 +825,30 @@ function go(p, t) {
 function openThreadScreen(on) { $("app").classList.toggle("thread-open", on); document.body.classList.toggle("thread-open", on); }
 function newThread(kind) { go(S.place === "general" ? "agent-desk" : S.place, null); setTimeout(() => { const s = document.querySelector('[data-sel="newKind"]'); if (s) s.value = kind; $("msg")?.focus(); }, 0); }
 function view(v) { S.view = v; pal(false); closeMenu(); if (phone()) openThreadScreen(true); render(); }
+const LOOK = {
+  theme: [["system", "System"], ["light", "Light"], ["dark", "Dark"]],
+  accent: [["indigo", "Indigo", "#6366f1"], ["blue", "Blue", "#3b82f6"], ["teal", "Teal", "#14b8a6"], ["rose", "Rose", "#ec4899"], ["amber", "Amber", "#f59e0b"]],
+  density: [["comfortable", "Comfortable"], ["compact", "Compact"]],
+  layout: [["modern", "Modern"], ["classic", "Classic"]],
+};
+const LOOK_DEF = { theme: "system", accent: "indigo", density: "comfortable", layout: "modern" };
+function lookNow() { const d = document.documentElement.dataset; return { theme: d.theme || "system", accent: d.accent || "indigo", density: d.density || "comfortable", layout: d.layout || "modern" }; }
+function setLook(k, v) {
+  const d = document.documentElement.dataset;
+  if (v === LOOK_DEF[k]) delete d[k]; else d[k] = v;
+  try {
+    if (k === "theme") { if (v === "system") localStorage.removeItem("theme"); else localStorage.setItem("theme", v); }
+    else { const l = lookNow(); delete l.theme; for (const x in l) if (l[x] === LOOK_DEF[x]) delete l[x]; localStorage.setItem("look", JSON.stringify(l)); }
+  } catch {}
+  openLook();
+}
+function openLook() {
+  const now = lookNow(), dl = $("look");
+  $("lookBody").innerHTML = Object.entries(LOOK).map(([k, opts]) => `<div class="lrow"><b>${k[0].toUpperCase() + k.slice(1)}</b><div class="persp" role="radiogroup" aria-label="${k}">` +
+    opts.map(([v, label, c]) => `<button type="button" role="radio" aria-checked="${now[k] === v}" class="${now[k] === v ? "on" : ""}" data-look="${k}:${v}">${c ? `<i class="sw" style="--c:${c}"></i>` : ""}${label}</button>`).join("") + `</div></div>`).join("");
+  if (!dl.open) dl.showModal();
+}
+document.addEventListener("click", (e) => { const b = e.target.closest?.("[data-look]"); if (!b) return; const [k, v] = b.dataset.look.split(":"); setLook(k, v); });
 function theme() { const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); const n = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = n; try { localStorage.setItem("theme", n); } catch {} }
 function send() {
   const ta = $("msg"); const v = ta?.value.trim(); if (!v) return toast("Type a message");
@@ -813,6 +872,7 @@ function act(a, el) {
     case "needs": { const n = NEEDS[0]; return go(n.place, n.thread); }
     case "theme": closeMenu(); return theme();
     case "help": closeMenu(); pal(false); return $("help").showModal();
+    case "look": closeMenu(); pal(false); return openLook();
     case "notes": return view("notes");
     case "history": return view("history");
     case "attachProject": return view("attach");
@@ -920,6 +980,7 @@ render();
 <dialog id="health" class="dlg"><div class="hhead"><b>Health</b><button type="button" id="healthClose">Close</button></div><div id="healthBody"></div></dialog>
 <dialog id="hsessions" class="dlg"><div class="hhead"><b>Sessions</b><button type="button" id="hsClose">Close</button></div><div id="hsBody"></div><form id="hsPin" hidden><label></label><div class="row"><input type="password" class="inp" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Session PIN" /><button>OK</button></div></form></dialog>
 <dialog id="agents" class="dlg"><div class="hhead"><b>Settings · Agents</b><button type="button" id="agentsClose">Close</button></div><div id="agentsBody"></div></dialog>
+<dialog id="look" class="dlg look"><div class="hhead"><b>Appearance</b><button type="button" onclick="this.closest('dialog').close()">Close</button></div><div id="lookBody"></div><p class="mute" style="font-size:12.5px;margin:8px 0 0">Kept in this browser only.</p></dialog>
 <dialog id="help" class="dlg help"><div class="hhead"><b>Help</b><button type="button" onclick="this.closest('dialog').close()">Close</button></div>
 <h4>Keys</h4>
 <div class="hrow"><span class="kbd">Ctrl K</span><span>search, jump to a thread, run a command; <code>?</code> query → web, <code>&gt;</code> commands only</span></div>
@@ -943,7 +1004,7 @@ render();
 <div class="hrow"><b>Compute</b><span>machines and their actions</span></div>
 <div class="hrow"><b>Needs you</b><span>approvals and agent questions waiting; answer them on the card</span></div>
 <h4>Where things are</h4>
-<div class="hrow"><b>R menu</b><span>profile, Notes (morning note on top), History, Usage, Schedules, Terminal, Sessions, Alerts, Health, theme</span></div>
+<div class="hrow"><b>R menu</b><span>profile, Notes (morning note on top), History, Usage, Schedules, Terminal, Sessions, Alerts, Health, Appearance (theme, accent, density, layout)</span></div>
 <div class="hrow"><b>Thread menu</b><span>close / reopen, herdr panes, merge, project settings</span></div>
 <div class="hrow"><b>desk.toml</b><span><code>[model]</code> per activity, <code>[[schedule]]</code> prompts — see <a href="https://github.com/vakkadar/agent-desk/tree/main/docs" target="_blank" rel="noopener">docs</a></span></div>
 </dialog>
